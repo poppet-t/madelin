@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ### AL ###
 #Template for AL projects for Dynamics 365 Business Central
 #launch.json folder
@@ -20,3 +21,11 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+=======
+__pycache__/
+*.pyc
+.venv/
+out/
+seed_workdir/
+seed_workdir_demo/
+>>>>>>> 99a69ac (Add mock, uafx, and uaf-bridge into madelin monorepo)
