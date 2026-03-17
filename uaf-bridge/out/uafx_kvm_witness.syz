@@ -1,0 +1,88 @@
+# UAF Witness Bridge pseudo-syz scaffold
+# NOTE: This is a deterministic, proof/debug scaffold, not a fully runnable syzkaller program.
+# NOTE: Exact argument synthesis and environment realization remain intentionally out of scope for v1.
+# candidate_id: cand_59fda0076e3243f2
+# candidate_schema_version: candidate/v1
+# witness_plan_schema_version: witness_plan/v1
+# representative_entry_func: kvm_vcpu_ioctl
+# representative_entry_kind: file_ioctl
+# representative_template_id: kvm_vcpu_ioctl:file_ioctl:kvm-arm64:regs:v1
+
+# setup:
+#   required_resources: fd_kvm, fd_vm, fd_vcpu
+
+# ordered_steps:
+#   - step_index=0 t=0 event=free
+#   - step_index=1 t=1 event=use
+#   - step_index=2 t=2 event=escape
+#   - step_index=3 t=3 event=cleanup
+#   - step_index=4 t=4 event=fetch
+#   - step_index=5 t=5 event=init_resource
+
+# barriers:
+#   - escape < fetch (Pointer must escape before later fetch/use chain.)
+#   - escape < fetch (VCPU timer context must be installed before it can be fetched from ioctl-side logic.)
+#   - free < use (Cross-entry UAF requires timer teardown to occur before later timer use.)
+#   - free < use (Use-after-free requires free to occur before use.)
+
+# predicates:
+#   - kvm_vcpu_fd_ready at fetch scope=heuristic
+#   - kvm_vm_fd_ready at escape scope=heuristic
+
+# execution_hints:
+#   candidate_flow: Con
+#   min_threads: 2
+
+thread_0 {
+  # step_index=0 t=0 event=free
+  openat$KVM(AT_FDCWD, '/dev/kvm', O_RDWR)
+  ioctl$KVM_CREATE_VM(fd_kvm, KVM_CREATE_VM, 0)
+  ioctl$KVM_CREATE_VCPU(fd_vm, KVM_CREATE_VCPU, 0)
+  ioctl$KVM_ARM_VCPU_INIT(fd_vcpu, KVM_ARM_VCPU_INIT, &init)
+  ioctl$KVM_SET_ONE_REG(fd_vcpu, KVM_SET_ONE_REG, &one_reg)
+  ioctl$KVM_GET_ONE_REG(fd_vcpu, KVM_GET_ONE_REG, &one_reg)
+  ioctl$KVM_RUN(fd_vcpu, KVM_RUN, 0)
+  # step_index=2 t=2 event=escape
+  openat$KVM(AT_FDCWD, '/dev/kvm', O_RDWR)
+  ioctl$KVM_CREATE_VM(fd_kvm, KVM_CREATE_VM, 0)
+  ioctl$KVM_CREATE_VCPU(fd_vm, KVM_CREATE_VCPU, 0)
+  ioctl$KVM_ARM_VCPU_INIT(fd_vcpu, KVM_ARM_VCPU_INIT, &init)
+  ioctl$KVM_SET_ONE_REG(fd_vcpu, KVM_SET_ONE_REG, &one_reg)
+  ioctl$KVM_GET_ONE_REG(fd_vcpu, KVM_GET_ONE_REG, &one_reg)
+  ioctl$KVM_RUN(fd_vcpu, KVM_RUN, 0)
+  # step_index=3 t=3 event=cleanup
+  openat$KVM(AT_FDCWD, '/dev/kvm', O_RDWR)
+  ioctl$KVM_CREATE_VM(fd_kvm, KVM_CREATE_VM, 0)
+  ioctl$KVM_CREATE_VCPU(fd_vm, KVM_CREATE_VCPU, 0)
+  ioctl$KVM_ARM_VCPU_INIT(fd_vcpu, KVM_ARM_VCPU_INIT, &init)
+  ioctl$KVM_SET_ONE_REG(fd_vcpu, KVM_SET_ONE_REG, &one_reg)
+  ioctl$KVM_GET_ONE_REG(fd_vcpu, KVM_GET_ONE_REG, &one_reg)
+  ioctl$KVM_RUN(fd_vcpu, KVM_RUN, 0)
+  # step_index=4 t=4 event=fetch
+  openat$KVM(AT_FDCWD, '/dev/kvm', O_RDWR)
+  ioctl$KVM_CREATE_VM(fd_kvm, KVM_CREATE_VM, 0)
+  ioctl$KVM_CREATE_VCPU(fd_vm, KVM_CREATE_VCPU, 0)
+  ioctl$KVM_ARM_VCPU_INIT(fd_vcpu, KVM_ARM_VCPU_INIT, &init)
+  ioctl$KVM_SET_ONE_REG(fd_vcpu, KVM_SET_ONE_REG, &one_reg)
+  ioctl$KVM_GET_ONE_REG(fd_vcpu, KVM_GET_ONE_REG, &one_reg)
+  ioctl$KVM_RUN(fd_vcpu, KVM_RUN, 0)
+  # step_index=5 t=5 event=init_resource
+  openat$KVM(AT_FDCWD, '/dev/kvm', O_RDWR)
+  ioctl$KVM_CREATE_VM(fd_kvm, KVM_CREATE_VM, 0)
+  ioctl$KVM_CREATE_VCPU(fd_vm, KVM_CREATE_VCPU, 0)
+  ioctl$KVM_ARM_VCPU_INIT(fd_vcpu, KVM_ARM_VCPU_INIT, &init)
+  ioctl$KVM_SET_ONE_REG(fd_vcpu, KVM_SET_ONE_REG, &one_reg)
+  ioctl$KVM_GET_ONE_REG(fd_vcpu, KVM_GET_ONE_REG, &one_reg)
+  ioctl$KVM_RUN(fd_vcpu, KVM_RUN, 0)
+}
+
+thread_1 {
+  # step_index=1 t=1 event=use
+  openat$KVM(AT_FDCWD, '/dev/kvm', O_RDWR)
+  ioctl$KVM_CREATE_VM(fd_kvm, KVM_CREATE_VM, 0)
+  ioctl$KVM_CREATE_VCPU(fd_vm, KVM_CREATE_VCPU, 0)
+  ioctl$KVM_ARM_VCPU_INIT(fd_vcpu, KVM_ARM_VCPU_INIT, &init)
+  ioctl$KVM_SET_ONE_REG(fd_vcpu, KVM_SET_ONE_REG, &one_reg)
+  ioctl$KVM_GET_ONE_REG(fd_vcpu, KVM_GET_ONE_REG, &one_reg)
+  ioctl$KVM_RUN(fd_vcpu, KVM_RUN, 0)
+}

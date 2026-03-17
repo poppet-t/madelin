@@ -1,0 +1,210 @@
+{
+  "$id": "https://uaf-bridge.local/schemas/mock_seed.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAF Bridge MOCK Seed",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "seed_version": {"const": "mock_seed/v1", "type": "string"},
+    "candidate_id": {"type": "string"},
+    "target": {"const": "linux", "type": "string"},
+    "arch": {"type": "string"},
+    "subsystem": {"type": "string"},
+    "flow": {"enum": ["Seq", "Con", "Unknown"], "type": "string"},
+    "threads": {"minimum": 1, "type": "integer"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "producer": {"type": "string"},
+        "normalizer": {"type": ["string", "null"]},
+        "uafx_warning_id": {"type": ["string", "null"]},
+        "witness_plan_status": {"type": "string"}
+      },
+      "required": ["producer", "normalizer", "uafx_warning_id", "witness_plan_status"]
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "entry_func": {"type": "string"},
+          "entry_kind": {"type": "string"},
+          "confidence": {"enum": ["grounded", "heuristic", "unknown"], "type": "string"},
+          "supported": {"type": "boolean"},
+          "support_level": {"enum": ["grounded", "heuristic", "unsupported"], "type": "string"},
+          "template_ids": {"type": "array", "items": {"type": "string"}},
+          "notes": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["entry_func", "entry_kind", "confidence", "supported", "support_level", "template_ids", "notes"]
+      }
+    },
+    "setup_sequence": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sequence_step"}
+    },
+    "trigger_sequence": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sequence_step"}
+    },
+    "abstract_steps": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "ordered_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "event": {"type": "string"},
+          "step_index": {"minimum": 0, "type": "integer"},
+          "timestamp": {"minimum": 0, "type": "integer"},
+          "thread_id": {"minimum": 0, "type": "integer"}
+        },
+        "required": ["event", "step_index", "timestamp", "thread_id"]
+      }
+    },
+    "ordering": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "before": {"type": "string"},
+          "after": {"type": "string"},
+          "reason": {"type": "string"}
+        },
+        "required": ["before", "after", "reason"]
+      }
+    },
+    "predicates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string"},
+          "must_hold_at": {"type": "string"},
+          "grounding": {"enum": ["grounded", "heuristic", "unknown"], "type": "string"}
+        },
+        "required": ["name", "must_hold_at", "grounding"]
+      }
+    },
+    "resource_dependencies": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "focus_syscall_families": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "mutation_hints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preserve_prefix_len": {"minimum": 0, "type": "integer"},
+        "focus_syscall_families": {"type": "array", "items": {"type": "string"}},
+        "prefer_two_thread_schedule": {"type": "boolean"},
+        "prefer_collide": {"type": "boolean"},
+        "mutate_near_steps": {"type": "array", "items": {"type": "string"}},
+        "stable_prefix_resources": {"type": "array", "items": {"type": "string"}},
+        "keep_ordering_edges": {"type": "array", "items": {"type": "string"}}
+      },
+      "required": [
+        "preserve_prefix_len",
+        "focus_syscall_families",
+        "prefer_two_thread_schedule",
+        "prefer_collide",
+        "mutate_near_steps",
+        "stable_prefix_resources",
+        "keep_ordering_edges"
+      ]
+    },
+    "thread_hints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prefer_collide": {"type": "boolean"},
+        "schedule_style": {"enum": ["single-thread", "two-thread-collision", "multi-thread"], "type": "string"},
+        "thread_step_counts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "thread_id": {"minimum": 0, "type": "integer"},
+              "step_count": {"minimum": 0, "type": "integer"}
+            },
+            "required": ["thread_id", "step_count"]
+          }
+        }
+      },
+      "required": ["prefer_collide", "schedule_style", "thread_step_counts"]
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mapping_confidence": {"type": "string"},
+        "supported": {"type": "boolean"},
+        "ready_for_smt": {"type": "boolean"},
+        "unsupported_reasons": {"type": "array", "items": {"type": "string"}}
+      },
+      "required": ["mapping_confidence", "supported", "ready_for_smt", "unsupported_reasons"]
+    },
+    "debug": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selected_template_id": {"type": ["string", "null"]},
+        "selected_entry_func": {"type": ["string", "null"]},
+        "selected_entry_kind": {"type": ["string", "null"]},
+        "same_object": {"type": ["boolean", "null"]},
+        "loc0": {"type": "object", "additionalProperties": true},
+        "loc1": {"type": "object", "additionalProperties": true},
+        "notes": {"type": "array", "items": {"type": "string"}}
+      },
+      "required": ["selected_template_id", "selected_entry_func", "selected_entry_kind", "same_object", "loc0", "loc1", "notes"]
+    }
+  },
+  "required": [
+    "seed_version",
+    "candidate_id",
+    "target",
+    "arch",
+    "subsystem",
+    "flow",
+    "threads",
+    "source",
+    "entries",
+    "setup_sequence",
+    "trigger_sequence",
+    "abstract_steps",
+    "ordered_steps",
+    "ordering",
+    "predicates",
+    "resource_dependencies",
+    "focus_syscall_families",
+    "mutation_hints",
+    "thread_hints",
+    "confidence",
+    "debug"
+  ],
+  "$defs": {
+    "sequence_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["syscall", "note"], "type": "string"},
+        "stage": {"enum": ["setup", "trigger"], "type": "string"},
+        "text": {"type": "string"},
+        "resource_effect": {"type": ["string", "null"]},
+        "family": {"type": ["string", "null"]},
+        "grounding": {"enum": ["grounded", "heuristic", "unknown"], "type": "string"}
+      },
+      "required": ["kind", "stage", "text", "resource_effect", "family", "grounding"]
+    }
+  }
+}

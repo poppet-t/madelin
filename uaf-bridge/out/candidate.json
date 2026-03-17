@@ -1,0 +1,176 @@
+{
+  "candidate_id": "cand_2ffcd1fad7e62aba",
+  "constraints": {
+    "events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "min_threads": 2,
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Pointer must escape before later fetch/use chain."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Use-after-free requires free to occur before use."
+      }
+    ],
+    "predicates": [
+      {
+        "must_hold_at": "fetch",
+        "name": "resource_ready",
+        "scope": "global"
+      }
+    ],
+    "same_object": true
+  },
+  "entries": [
+    {
+      "entry_func": "demo_uaf_ioctl",
+      "entry_kind": "file_ioctl",
+      "grounded": {
+        "entry_func": "demo_uaf_ioctl",
+        "entry_kind": "file_ioctl",
+        "mapping_source": "manual"
+      },
+      "heuristic": {},
+      "support_level": "grounded",
+      "supported": true,
+      "syscall_templates": [
+        {
+          "calls": [
+            "openat$DEV(AT_FDCWD, '/dev/uaf_demo', O_RDWR)",
+            "ioctl$CMD(fd_dev, 0x0, 0x0)"
+          ],
+          "notes": "Placeholder file-ioctl template.",
+          "required_resources": [
+            "fd_dev"
+          ],
+          "template_id": "demo_uaf_ioctl:file_ioctl:v1"
+        }
+      ],
+      "unsupported_reasons": []
+    },
+    {
+      "entry_func": "demo_uaf_read",
+      "entry_kind": "file_read",
+      "grounded": {
+        "entry_func": "demo_uaf_read",
+        "entry_kind": "file_read",
+        "mapping_source": "manual"
+      },
+      "heuristic": {},
+      "support_level": "grounded",
+      "supported": true,
+      "syscall_templates": [
+        {
+          "calls": [
+            "openat$DEV(AT_FDCWD, '/dev/uaf_demo', O_RDONLY)",
+            "read(fd_dev, data, 0x100)"
+          ],
+          "notes": "Placeholder file-read template.",
+          "required_resources": [
+            "fd_dev",
+            "data"
+          ],
+          "template_id": "demo_uaf_read:file_read:v1"
+        }
+      ],
+      "unsupported_reasons": []
+    }
+  ],
+  "flow": "Con",
+  "loc0": {
+    "context": [
+      "demo_uaf_ioctl",
+      "demo_obj_put",
+      "kfree"
+    ],
+    "file": "drivers/misc/demo_uaf.c",
+    "function": "demo_obj_free",
+    "line": 178
+  },
+  "loc1": {
+    "context": [
+      "demo_uaf_read",
+      "copy_to_user",
+      "mutex_lock"
+    ],
+    "file": "drivers/misc/demo_uaf.c",
+    "function": "demo_obj_use",
+    "line": 231
+  },
+  "provenance": {
+    "normalizer": "extractor.normalize_candidate",
+    "raw_warning_sha256_prefix": "2ffcd1fad7e62aba",
+    "warning_id": "warn-demo-0001"
+  },
+  "raw_warning": {
+    "constraints": {
+      "predicates": [
+        {
+          "must_hold_at": "fetch",
+          "name": "resource_ready",
+          "scope": "global"
+        }
+      ],
+      "same_object": true
+    },
+    "flow": "Con",
+    "loc0": {
+      "context": [
+        "demo_uaf_ioctl",
+        "demo_obj_put",
+        "kfree"
+      ],
+      "file": "drivers/misc/demo_uaf.c",
+      "function": "demo_obj_free",
+      "line": 178
+    },
+    "loc1": {
+      "context": [
+        "demo_uaf_read",
+        "copy_to_user",
+        "mutex_lock"
+      ],
+      "file": "drivers/misc/demo_uaf.c",
+      "function": "demo_obj_use",
+      "line": 231
+    },
+    "metadata": {
+      "confidence": "medium",
+      "subsystem": "demo"
+    },
+    "source": {
+      "raw_file": "warnings/sample_warn_data.json",
+      "tool": "uaf-static-pass",
+      "version": "0.1"
+    },
+    "warning_id": "warn-demo-0001"
+  },
+  "schema_version": "candidate/v1",
+  "source": {
+    "raw_file": "extractor/sample_warn_data.json",
+    "tool": "uaf-static-pass",
+    "version": "0.1"
+  },
+  "status": {
+    "grounded_entries": [
+      "demo_uaf_ioctl",
+      "demo_uaf_read"
+    ],
+    "heuristic_entries": [],
+    "mapping_confidence": "manual",
+    "ready_for_smt": true,
+    "supported": true,
+    "unsupported_entries": [],
+    "unsupported_reasons": []
+  }
+}

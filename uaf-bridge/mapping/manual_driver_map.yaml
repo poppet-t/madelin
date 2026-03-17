@@ -1,0 +1,28 @@
+{
+  "manual_entries": {
+    "demo_uaf_ioctl": {
+      "entry_kind": "file_ioctl",
+      "notes": "Curated mapping for the sample warning input."
+    },
+    "demo_uaf_read": {
+      "entry_kind": "file_read",
+      "notes": "Curated mapping for the sample warning input."
+    },
+    "kvm_vcpu_ioctl": {
+      "entry_kind": "file_ioctl",
+      "notes": "Curated KVM/arm64 ioctl-side entry for narrow bridge import slice."
+    },
+    "kvm_vm_ioctl_create_vcpu": {
+      "entry_kind": "file_ioctl",
+      "notes": "Curated KVM/arm64 VM/VCPU setup entry for narrow bridge import slice."
+    },
+    "kvm_vm_ioctl": {
+      "entry_kind": "file_ioctl",
+      "notes": "Curated KVM/arm64 VM-level ioctl entry for device and VM configuration paths."
+    },
+    "kvm_device_ioctl": {
+      "entry_kind": "file_ioctl",
+      "notes": "Curated KVM/arm64 device-fd ioctl entry for device-attribute style paths."
+    }
+  }
+}

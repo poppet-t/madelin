@@ -1,0 +1,254 @@
+{
+  "$id": "https://uaf-bridge.local/schemas/witness_plan.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "barriers": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "before",
+          "after",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "candidate_id": {
+      "type": "string"
+    },
+    "debug": {
+      "additionalProperties": false,
+      "properties": {
+        "check_result": {
+          "type": "string"
+        },
+        "encoded_event_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "encoded_events": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "input_mapping_confidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "soft_constraints": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "solver": {
+          "type": "string"
+        },
+        "unsat_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "solver",
+        "check_result",
+        "encoded_event_count",
+        "encoded_events",
+        "input_mapping_confidence",
+        "soft_constraints",
+        "unsat_reasons"
+      ],
+      "type": "object"
+    },
+    "execution_hints": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_flow": {
+          "type": "string"
+        },
+        "entry_selection": {
+          "additionalProperties": false,
+          "properties": {
+            "entry_func": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "entry_kind": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "template_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "entry_func",
+            "entry_kind",
+            "template_id"
+          ],
+          "type": "object"
+        },
+        "min_threads": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidate_flow",
+        "min_threads",
+        "entry_selection",
+        "notes"
+      ],
+      "type": "object"
+    },
+    "ordered_steps": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "step_index": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "timestamp": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "event",
+          "timestamp",
+          "step_index"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "predicates": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "must_hold_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "must_hold_at",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "sat": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "witness_plan/v1",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "sat",
+        "unsat"
+      ],
+      "type": "string"
+    },
+    "threads": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "steps": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "event": {
+                  "type": "string"
+                },
+                "step_index": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "timestamp": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "event",
+                "timestamp",
+                "step_index"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "thread_id": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "thread_id",
+          "steps"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "candidate_id",
+    "schema_version",
+    "sat",
+    "status",
+    "ordered_steps",
+    "threads",
+    "barriers",
+    "predicates",
+    "execution_hints",
+    "debug"
+  ],
+  "title": "UAF Witness Plan",
+  "type": "object"
+}

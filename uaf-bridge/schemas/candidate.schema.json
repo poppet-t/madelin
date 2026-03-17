@@ -1,0 +1,375 @@
+{
+  "$defs": {
+    "location": {
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "function": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "function",
+        "file",
+        "line",
+        "context"
+      ],
+      "type": "object"
+    },
+    "template": {
+      "additionalProperties": false,
+      "properties": {
+        "calls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "required_resources": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "template_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "template_id",
+        "calls",
+        "required_resources",
+        "notes"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://uaf-bridge.local/schemas/candidate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "analysis_context": {
+      "additionalProperties": false,
+      "properties": {
+        "arch": {
+          "type": "string"
+        },
+        "kernel_area": {
+          "type": "string"
+        },
+        "subsystem": {
+          "type": "string"
+        },
+        "target_family": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kernel_area",
+        "subsystem",
+        "arch",
+        "target_family"
+      ],
+      "type": "object"
+    },
+    "candidate_id": {
+      "type": "string"
+    },
+    "constraints": {
+      "additionalProperties": false,
+      "properties": {
+        "events": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "min_threads": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "partial_order": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "after": {
+                "type": "string"
+              },
+              "before": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "before",
+              "after",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "predicates": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "must_hold_at": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "must_hold_at",
+              "scope"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "same_object": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "events",
+        "partial_order",
+        "predicates",
+        "same_object",
+        "min_threads"
+      ],
+      "type": "object"
+    },
+    "entries": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_func": {
+            "type": "string"
+          },
+          "entry_kind": {
+            "type": "string"
+          },
+          "grounded": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "heuristic": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "support_level": {
+            "enum": [
+              "grounded",
+              "heuristic",
+              "unsupported"
+            ],
+            "type": "string"
+          },
+          "supported": {
+            "type": "boolean"
+          },
+          "syscall_templates": {
+            "items": {
+              "$ref": "#/$defs/template"
+            },
+            "type": "array"
+          },
+          "unsupported_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "entry_func",
+          "entry_kind",
+          "grounded",
+          "heuristic",
+          "supported",
+          "support_level",
+          "unsupported_reasons",
+          "syscall_templates"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "flow": {
+      "enum": [
+        "Seq",
+        "Con",
+        "Unknown"
+      ],
+      "type": "string"
+    },
+    "loc0": {
+      "$ref": "#/$defs/location"
+    },
+    "loc1": {
+      "$ref": "#/$defs/location"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "normalizer": {
+          "type": "string"
+        },
+        "raw_warning_sha256_prefix": {
+          "type": "string"
+        },
+        "warning_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "normalizer",
+        "raw_warning_sha256_prefix",
+        "warning_id"
+      ],
+      "type": "object"
+    },
+    "raw_warning": {
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "candidate/v1",
+      "type": "string"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "tool",
+        "version",
+        "raw_file"
+      ],
+      "type": "object"
+    },
+    "status": {
+      "additionalProperties": false,
+      "properties": {
+        "grounded_entries": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "heuristic_entries": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mapping_confidence": {
+          "enum": [
+            "manual",
+            "heuristic",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "ready_for_smt": {
+          "type": "boolean"
+        },
+        "supported": {
+          "type": "boolean"
+        },
+        "unsupported_entries": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "unsupported_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "mapping_confidence",
+        "ready_for_smt",
+        "supported",
+        "grounded_entries",
+        "heuristic_entries",
+        "unsupported_entries",
+        "unsupported_reasons"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "candidate_id",
+    "schema_version",
+    "source",
+    "provenance",
+    "raw_warning",
+    "loc0",
+    "loc1",
+    "flow",
+    "entries",
+    "constraints",
+    "status"
+  ],
+  "title": "Normalized UAF Candidate",
+  "type": "object"
+}

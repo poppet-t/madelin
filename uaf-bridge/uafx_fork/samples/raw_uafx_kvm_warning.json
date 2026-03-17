@@ -1,0 +1,98 @@
+{
+  "warning_id": "uafx-kvm-arm64-0001",
+  "analysis_kind": "cross_entry_uaf",
+  "kernel_area": "arch/arm64/kvm",
+  "arch": "arm64",
+  "flow": "Con",
+  "free_site": {
+    "function": "kvm_timer_vcpu_terminate",
+    "file": "arch/arm64/kvm/arch_timer.c",
+    "line": 812,
+    "context": [
+      "kvm_vcpu_release",
+      "kvm_timer_vcpu_terminate",
+      "destroy_hrtimer"
+    ]
+  },
+  "use_site": {
+    "function": "kvm_timer_should_fire",
+    "file": "arch/arm64/kvm/arch_timer.c",
+    "line": 923,
+    "context": [
+      "kvm_vcpu_ioctl",
+      "kvm_timer_flush_hwstate",
+      "kvm_timer_should_fire"
+    ]
+  },
+  "entry_candidates": [
+    {
+      "function": "kvm_vcpu_ioctl",
+      "kind_hint": "file_ioctl",
+      "confidence": "grounded"
+    },
+    {
+      "function": "kvm_vm_ioctl_create_vcpu",
+      "kind_hint": "file_ioctl",
+      "confidence": "grounded"
+    }
+  ],
+  "object_hints": {
+    "same_object": true,
+    "object_type": "struct kvm_vcpu_arch_timer"
+  },
+  "efp": {
+    "escape_sites": [
+      {
+        "function": "kvm_vm_ioctl_create_vcpu",
+        "stmt": "vcpu->arch.timer = timer_ctx",
+        "object_hint": "struct kvm_vcpu_arch_timer"
+      }
+    ],
+    "fetch_sites": [
+      {
+        "function": "kvm_vcpu_ioctl",
+        "stmt": "timer = vcpu->arch.timer",
+        "object_hint": "struct kvm_vcpu_arch_timer"
+      }
+    ],
+    "clobber_sites": [
+      {
+        "function": "kvm_timer_vcpu_terminate",
+        "stmt": "destroy_hrtimer(&timer->bg_timer)"
+      }
+    ]
+  },
+  "lock_ops": [],
+  "condition_ops": [],
+  "thread_ops": [
+    {
+      "kind": "workqueue",
+      "function": "kvm_timer_flush_hwstate",
+      "context_role": "use"
+    }
+  ],
+  "partial_order": [
+    {
+      "before": "escape",
+      "after": "fetch",
+      "reason": "VCPU timer context must be installed before it can be fetched from ioctl-side logic."
+    },
+    {
+      "before": "free",
+      "after": "use",
+      "reason": "Cross-entry UAF requires timer teardown to occur before later timer use."
+    }
+  ],
+  "predicate_hints": [
+    {
+      "name": "kvm_vm_fd_ready",
+      "must_hold_at": "escape",
+      "scope": "heuristic"
+    },
+    {
+      "name": "kvm_vcpu_fd_ready",
+      "must_hold_at": "fetch",
+      "scope": "heuristic"
+    }
+  ]
+}

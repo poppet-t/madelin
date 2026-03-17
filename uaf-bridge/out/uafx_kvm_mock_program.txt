@@ -1,0 +1,39 @@
+# MOCK adapter scaffold
+# This is a deterministic bridge-to-MOCK handoff artifact, not a full Healer runtime program.
+# candidate_id: cand_59fda0076e3243f2
+# target: linux/arm64 subsystem=kvm
+# flow: Con threads=2
+
+[setup_sequence]
+0: openat$KVM(AT_FDCWD, '/dev/kvm', O_RDWR)
+1: ioctl$KVM_CREATE_VM(fd_kvm, KVM_CREATE_VM, 0)
+2: ioctl$KVM_CREATE_VCPU(fd_vm, KVM_CREATE_VCPU, 0)
+
+[trigger_sequence]
+0: ioctl$KVM_ARM_VCPU_INIT(fd_vcpu, KVM_ARM_VCPU_INIT, &init)
+1: ioctl$KVM_SET_ONE_REG(fd_vcpu, KVM_SET_ONE_REG, &one_reg)
+2: ioctl$KVM_GET_ONE_REG(fd_vcpu, KVM_GET_ONE_REG, &one_reg)
+3: ioctl$KVM_RUN(fd_vcpu, KVM_RUN, 0)
+4: ioctl$KVM_ARM_VCPU_INIT(fd_vcpu, KVM_ARM_VCPU_INIT, &init)
+5: ioctl$KVM_RUN(fd_vcpu, KVM_RUN, 0)
+
+[ordering]
+- escape < fetch (Pointer must escape before later fetch/use chain.)
+- escape < fetch (VCPU timer context must be installed before it can be fetched from ioctl-side logic.)
+- free < use (Cross-entry UAF requires timer teardown to occur before later timer use.)
+- free < use (Use-after-free requires free to occur before use.)
+
+[mutation_policy]
+preserve_prefix_len = 3
+prefer_two_thread_schedule = true
+prefer_collide = true
+focus_syscall_families = openat$KVM, KVM_CREATE_VM, KVM_CREATE_VCPU, KVM_ARM_VCPU_INIT, KVM_SET_ONE_REG, KVM_GET_ONE_REG, KVM_RUN, KVM_CREATE_DEVICE, KVM_SET_DEVICE_ATTR, KVM_IRQ_LINE
+mutate_near_steps = fetch, use
+
+[thread_schedule]
+t0 step=0 ts=0 event=free
+t1 step=1 ts=1 event=use
+t0 step=2 ts=2 event=escape
+t0 step=3 ts=3 event=cleanup
+t0 step=4 ts=4 event=fetch
+t0 step=5 ts=5 event=init_resource

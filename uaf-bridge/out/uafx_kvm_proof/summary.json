@@ -1,0 +1,109 @@
+{
+  "candidate_id": "cand_59fda0076e3243f2",
+  "candidate_schema_version": "candidate/v1",
+  "entry_classifications": [
+    {
+      "entry_func": "kvm_vcpu_ioctl",
+      "entry_kind": "file_ioctl",
+      "support_level": "grounded",
+      "supported": true,
+      "unsupported_reasons": []
+    },
+    {
+      "entry_func": "kvm_vm_ioctl_create_vcpu",
+      "entry_kind": "file_ioctl",
+      "support_level": "grounded",
+      "supported": true,
+      "unsupported_reasons": []
+    }
+  ],
+  "generated_at_utc": "2026-03-17T16:02:09.767192+00:00",
+  "limitations": [
+    "Witness plan is structural only; exact syscall argument synthesis is not implemented.",
+    "witness.syz is a pseudo-syz scaffold for inspection and downstream realization, not a guaranteed runnable syzkaller program."
+  ],
+  "sat": true,
+  "source": {
+    "raw_file": "out/uafx_kvm_bridge_export.json",
+    "tool": "uafx-bridge-import",
+    "version": "0.1"
+  },
+  "status": "sat",
+  "step_count": 6,
+  "steps": [
+    {
+      "event": "free",
+      "step_index": 0,
+      "timestamp": 0
+    },
+    {
+      "event": "use",
+      "step_index": 1,
+      "timestamp": 1
+    },
+    {
+      "event": "escape",
+      "step_index": 2,
+      "timestamp": 2
+    },
+    {
+      "event": "cleanup",
+      "step_index": 3,
+      "timestamp": 3
+    },
+    {
+      "event": "fetch",
+      "step_index": 4,
+      "timestamp": 4
+    },
+    {
+      "event": "init_resource",
+      "step_index": 5,
+      "timestamp": 5
+    }
+  ],
+  "threads": [
+    {
+      "steps": [
+        {
+          "event": "free",
+          "step_index": 0,
+          "timestamp": 0
+        },
+        {
+          "event": "escape",
+          "step_index": 2,
+          "timestamp": 2
+        },
+        {
+          "event": "cleanup",
+          "step_index": 3,
+          "timestamp": 3
+        },
+        {
+          "event": "fetch",
+          "step_index": 4,
+          "timestamp": 4
+        },
+        {
+          "event": "init_resource",
+          "step_index": 5,
+          "timestamp": 5
+        }
+      ],
+      "thread_id": 0
+    },
+    {
+      "steps": [
+        {
+          "event": "use",
+          "step_index": 1,
+          "timestamp": 1
+        }
+      ],
+      "thread_id": 1
+    }
+  ],
+  "witness_file": "out/uafx_kvm_witness.syz",
+  "witness_plan_schema_version": "witness_plan/v1"
+}

@@ -1,0 +1,43 @@
+{
+  "source": {
+    "tool": "uaf-static-pass",
+    "version": "0.1",
+    "raw_file": "warnings/sample_warn_data.json"
+  },
+  "warning_id": "warn-demo-0001",
+  "loc0": {
+    "function": "demo_obj_free",
+    "file": "drivers/misc/demo_uaf.c",
+    "line": 178,
+    "context": [
+      "demo_uaf_ioctl",
+      "demo_obj_put",
+      "kfree"
+    ]
+  },
+  "loc1": {
+    "function": "demo_obj_use",
+    "file": "drivers/misc/demo_uaf.c",
+    "line": 231,
+    "context": [
+      "demo_uaf_read",
+      "copy_to_user",
+      "mutex_lock"
+    ]
+  },
+  "flow": "Con",
+  "constraints": {
+    "same_object": true,
+    "predicates": [
+      {
+        "name": "resource_ready",
+        "must_hold_at": "fetch",
+        "scope": "global"
+      }
+    ]
+  },
+  "metadata": {
+    "subsystem": "demo",
+    "confidence": "medium"
+  }
+}
