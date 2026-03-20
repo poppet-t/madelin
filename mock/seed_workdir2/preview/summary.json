@@ -1,0 +1,26 @@
+{
+  "bias_file": "seed_workdir2/bias.json",
+  "candidate_id": "cand_59fda0076e3243f2",
+  "flow": "Con",
+  "focus_syscall_families": [
+    "openat$KVM",
+    "KVM_CREATE_VM",
+    "KVM_CREATE_VCPU",
+    "KVM_ARM_VCPU_INIT",
+    "KVM_SET_ONE_REG",
+    "KVM_GET_ONE_REG",
+    "KVM_RUN",
+    "KVM_CREATE_DEVICE",
+    "KVM_SET_DEVICE_ATTR",
+    "KVM_IRQ_LINE"
+  ],
+  "import_version": "bridge_seed_import/v1",
+  "input_dir": "seed_workdir2/input",
+  "prefer_collide": true,
+  "program_count": 4,
+  "relations_file": "seed_workdir2/relations/bridge_seed.relations",
+  "setup_prefix_len": 3,
+  "subsystem": "kvm",
+  "target": "linux/arm64",
+  "threads": 2
+}
