@@ -467,6 +467,8 @@ fn build_qemu_command(conf: &QemuConfig) -> (Command, PortGuard) {
     let image = vec![
         "-drive".to_string(),
         format!("file={},index=0,media=disk", conf.disk_img),
+        "-drive".to_string(),
+        "file=/home/charles/kvm-fuzz/images/seed.img,index=1,media=disk,readonly=on".to_string(),
     ];
 
     let mut append = static_conf.append.clone();
@@ -605,7 +607,7 @@ fn static_conf<T: AsRef<str>>(os_arch: T) -> Option<&'static QemuStaticConf> {
                 args: "-machine virt,virtualization=on -cpu cortex-a57",
                 net_dev:   "virtio-net-pci",
                 append: vec![
-                    "root=/dev/vda",
+                    "root=/dev/vda1",
                     "console=ttyAMA0",
                 ],
             },
@@ -614,7 +616,7 @@ fn static_conf<T: AsRef<str>>(os_arch: T) -> Option<&'static QemuStaticConf> {
                 net_dev: "virtio-net-pci",
                 args: "",
                 append: vec![
-                    "root=/dev/vda",
+                    "root=/dev/vda1",
                     "console=ttyAMA0",
                 ],
             },
@@ -638,7 +640,7 @@ fn static_conf<T: AsRef<str>>(os_arch: T) -> Option<&'static QemuStaticConf> {
                 args:               "-machine virt",
                 net_dev:                 "virtio-net-pci",
                 append: vec![
-                    "root=/dev/vda",
+                    "root=/dev/vda1",
                     "console=ttyS0",
                 ],
             },
@@ -647,7 +649,7 @@ fn static_conf<T: AsRef<str>>(os_arch: T) -> Option<&'static QemuStaticConf> {
                 args: "-M s390-ccw-virtio -cpu max,zpci=on",
                 net_dev:   "virtio-net-pci",
                 append: vec![
-                    "root=/dev/vda",
+                    "root=/dev/vda1",
                 ],
             },
         };

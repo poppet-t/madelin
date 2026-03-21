@@ -13,6 +13,10 @@ pub fn ssh_basic_cmd<T: AsRef<str>>(
     ssh_cmd
         .args(vec!["-F", "/dev/null"])
         .args(vec!["-o", "BatchMode=yes"])
+        .args(vec!["-o", "ConnectTimeout=5"])
+        .args(vec!["-o", "ConnectionAttempts=1"])
+        .args(vec!["-o", "ServerAliveInterval=5"])
+        .args(vec!["-o", "ServerAliveCountMax=1"])
         .args(vec!["-o", "IdentitiesOnly=yes"])
         .args(vec!["-o", "StrictHostKeyChecking=no"])
         .args(vec!["-o", "UserKnownHostsFile=/dev/null"])
@@ -46,6 +50,10 @@ pub fn scp<T: AsRef<str>, P: AsRef<Path>>(
     scp_cmd
         .args(vec!["-F", "/dev/null"])
         .args(vec!["-o", "BatchMode=yes"])
+        .args(vec!["-o", "ConnectTimeout=5"])
+        .args(vec!["-o", "ConnectionAttempts=1"])
+        .args(vec!["-o", "ServerAliveInterval=5"])
+        .args(vec!["-o", "ServerAliveCountMax=1"])
         .args(vec!["-o", "IdentitiesOnly=yes"])
         .args(vec!["-o", "StrictHostKeyChecking=no"])
         .args(vec!["-o", "UserKnownHostsFile=/dev/null"])
