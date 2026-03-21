@@ -1,0 +1,30 @@
+{
+  "target": "linux/arm64",
+  "kernel_image": "/home/charles/kvm-fuzz/kernel/Image",
+  "disk_image": "/home/charles/kvm-fuzz/images/arm64.img",
+  "syz_dir": "/home/charles/madelin/mock/target/release/syz-bin",
+  "syz_executor": "/home/charles/madelin/mock/target/release/syz-bin/bin/linux_arm64/syz-executor",
+  "output_dir": "/home/charles/madelin/mock/output-kvm-seeded",
+  "seeded": true,
+  "input_dir": "/home/charles/madelin/mock/seed_workdir/input",
+  "input_seed_program_count": 4,
+  "relations_file": "/home/charles/madelin/mock/seed_workdir/relations/bridge_seed.relations",
+  "relation_edge_count": 9,
+  "bridge_bias_path": "/home/charles/madelin/mock/seed_workdir/bias.json",
+  "bridge_bias_loaded": true,
+  "focus_syscall_families": [
+    "openat$KVM",
+    "KVM_CREATE_VM",
+    "KVM_CREATE_VCPU",
+    "KVM_ARM_VCPU_INIT",
+    "KVM_SET_ONE_REG",
+    "KVM_GET_ONE_REG",
+    "KVM_RUN",
+    "KVM_CREATE_DEVICE",
+    "KVM_SET_DEVICE_ATTR",
+    "KVM_IRQ_LINE"
+  ],
+  "preserve_prefix_len": 3,
+  "prefer_two_thread_schedule": true,
+  "prefer_collide": true
+}

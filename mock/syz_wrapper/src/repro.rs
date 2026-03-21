@@ -172,23 +172,16 @@ fn build_log(target: &Target, history: &[(ExecOpt, Prog)], crash_log: &[u8]) -> 
 }
 
 fn syz_conf(conf: &ReproConfig) -> String {
-    let conf = json!({
-        "target": &conf.target,
-        "http": "127.0.0.1:65534",
-        "workdir": &conf.work_dir,
-        "image": &conf.disk_img,
-        "sshkey": &conf.ssh_key,
-        "syzkaller": &conf.syz_dir,
-        "procs": 2,
-        "type": "qemu",
-        "vm": {
-            "count": conf.qemu_count,
-            "kernel": conf.kernel_img,
-            "cpu": conf.qemu_smp,
-            "mem": conf.qemu_mem,
-        }
-    });
-
-    // conf.to_string()
-    to_string(&conf).unwrap()
+    format!(
+        r#"{{"target":"{}","http":"127.0.0.1:65534","workdir":"{}","image":"{}","sshkey":"{}","syzkaller":"{}","procs":2,"type":"qemu","vm":{{"count":{},"kernel":"{}","cpu":{},"mem":{}}}}}"#,
+        conf.target,
+        conf.work_dir,
+        conf.disk_img,
+        conf.ssh_key,
+        conf.syz_dir,
+        conf.qemu_count,
+        conf.kernel_img,
+        conf.qemu_smp,
+        conf.qemu_mem,
+    )
 }

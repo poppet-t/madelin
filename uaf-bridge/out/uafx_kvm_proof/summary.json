@@ -17,7 +17,7 @@
       "unsupported_reasons": []
     }
   ],
-  "generated_at_utc": "2026-03-17T16:19:38.889421+00:00",
+  "generated_at_utc": "2026-03-20T10:41:04.104664+00:00",
   "limitations": [
     "Witness plan is structural only; exact syscall argument synthesis is not implemented.",
     "witness.syz is a pseudo-syz scaffold for inspection and downstream realization, not a guaranteed runnable syzkaller program."
