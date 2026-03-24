@@ -10,13 +10,13 @@ The core contract is:
 
 1. raw static warning JSON -> normalized `candidate.json`
 2. normalized candidate -> Z3 `witness_plan.json`
-3. candidate + witness plan -> deterministic pseudo-syz `witness.syz`
+3. candidate + witness plan -> deterministic runnable narrow-KVM `witness.syz`
 4. candidate + witness plan -> `mock_seed.json`
 5. `mock_seed.json` -> MOCK-oriented adapter JSON / textual scaffold
 6. candidate + witness plan + witness -> proof/debug bundle
 7. raw UAFX warning -> richer UAFX bridge export -> imported KVM/arm64 candidate
 
-The implementation stays intentionally narrow. It is **not** a full fuzzing platform, not a full syzkaller integration, and not a perfect KVM semantic reproducer. It is a **structural guidance bridge** for arm64 KVM bug hunting.
+The implementation stays intentionally narrow. It is **not** a full fuzzing platform, not a broad syzkaller integration, and not a perfect KVM semantic reproducer. It is a **structural guidance bridge** for arm64 KVM bug hunting.
 
 ## What is implemented
 
@@ -26,7 +26,8 @@ The implementation stays intentionally narrow. It is **not** a full fuzzing plat
 - Explicit grounded vs heuristic entry metadata
 - Explicit unsupported entry marking and unsupported reasons
 - Structural Z3 witness synthesis with stable `ordered_steps`
-- Deterministic pseudo-syz scaffold emission with proof/debug comments
+- Runnable narrow-KVM witness emission with structural schedule/debug comments
+- Local witness validation against the narrow supported KVM subset
 - Deterministic `mock_seed.json` export for MOCK corpus seeding and mutation biasing
 - MOCK adapter JSON import and deterministic textual scaffold emission
 - Proof packaging into `proof/proof.md` and `proof/summary.json`
@@ -37,7 +38,7 @@ The implementation stays intentionally narrow. It is **not** a full fuzzing plat
 - `extractor/` — warning intake and candidate normalization
 - `mapping/` — entry classification and KVM/arm64 syscall template selection
 - `smt/` — Z3 encoding and witness-plan extraction
-- `runtime/` — pseudo-syz scaffold emission and `mock_seed.json` export
+- `runtime/` — runnable witness emission, witness validation, and `mock_seed.json` export
 - `mock_adapter/` — clean handoff into MOCK-oriented seed/corpus/mutation representations
 - `proof/` — proof/debug artifact packaging
 - `schemas/` — runtime-enforced JSON schemas
@@ -62,6 +63,24 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
 ```
+
+## Environment preflight
+
+Run this before the bridge demo, smoke scripts, or bridge-side tests:
+
+```bash
+cd /Users/CJ/Desktop/Kernel-stuff/madelin/uaf-bridge
+python3 scripts/check_env.py
+```
+
+The checker validates:
+- Python version
+- `jsonschema`
+- `z3` / `z3-solver`
+- importability of the bridge solver / witness / harness entrypoints
+- optional `pytest` availability for bridge tests
+
+If a required import is missing, it exits non-zero with an explicit install hint instead of letting the first later CLI fail with an opaque import traceback.
 
 ## Architecture in plain English
 
@@ -133,13 +152,14 @@ python3 -m smt.solve_candidate \
   --output out/witness_plan.json
 ```
 
-### 3) Emit witness scaffold
+### 3) Emit runnable witness
 
 ```bash
 python3 -m runtime.emit_witness_syz \
   --candidate out/candidate.json \
   --plan out/witness_plan.json \
-  --output out/witness.syz
+  --output out/witness.syz \
+  --syz-root tests/fixtures/syzkaller
 ```
 
 ### 4) Export MOCK seed intent
@@ -210,7 +230,7 @@ Carries:
 
 ### witness.syz
 
-This is a deterministic pseudo-syz scaffold for inspection, debugging, and downstream realization. It is not presented as a fully runnable syzkaller program.
+This is a deterministic runnable witness for the currently supported narrow arm64 KVM subset. It keeps structural plan metadata as comments, but the concrete syscall order follows the supported template/resource chain rather than claiming full semantic reconstruction from the SMT timestamps.
 
 ### mock_seed.json
 
@@ -241,6 +261,14 @@ All CLIs:
 - print readable error messages to stderr
 - return non-zero exit codes on failure
 - include `candidate_id` in errors when available
+- fail unsupported witness / harness candidate families explicitly instead of silently pretending broader coverage
+
+## Narrow support matrix
+
+- **Runnable witness support**: `openat$KVM`, `KVM_CREATE_VM`, `KVM_CREATE_VCPU`, `KVM_ARM_VCPU_INIT`, `KVM_SET_ONE_REG`, `KVM_GET_ONE_REG`, and `KVM_RUN`
+- **Harness support**: one arm64 KVM timer close-vs-run family only
+- **Unsupported witness cases**: broader KVM device / IRQ templates, templates outside the narrow witness family subset, and candidates whose resource or thread shape cannot be represented by the current witness emitter
+- **Unsupported harness cases**: non-KVM candidates, non-concurrent candidates, wrong entry function, wrong `loc0` / `loc1` pair, or missing timer object hint
 
 ## Tests
 
@@ -261,12 +289,10 @@ The suite includes:
 ## Intentional v1 limits
 
 Still intentionally unimplemented:
-- exact ioctl values and concrete argument synthesis
+- broader KVM device / IRQ witness coverage
+- broader micro-harness families beyond the narrow timer close-vs-run path
 - exact guest memory, register, and device-state synthesis for deep KVM semantics
-- dynamic VM execution / syzkaller integration
-- direct in-tree MOCK runtime embedding
 - generalized driver-environment inference
-- crash matching and runtime repair logic
 - broad subsystem support beyond the narrow template taxonomy
 
 ## Example commands

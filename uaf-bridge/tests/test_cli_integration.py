@@ -7,8 +7,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLE_WARNING = ROOT / "extractor" / "sample_warn_data.json"
+BRIDGE_EXPORT = ROOT / "extractor" / "sample_uafx_kvm_bridge_export.json"
 UAFX_RAW_WARNING = ROOT / "uafx_fork" / "samples" / "raw_uafx_kvm_warning.json"
+SYZ_ROOT = Path(__file__).resolve().parent / "fixtures" / "syzkaller"
 
 
 def run_cli(args: list[str], cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
@@ -30,15 +31,15 @@ def test_end_to_end_cli_pipeline(tmp_path: Path) -> None:
     mock_program_path = tmp_path / "mock_program.txt"
     proof_dir = tmp_path / "proof"
 
-    normalize = run_cli([
+    import_candidate = run_cli([
         "-m",
-        "extractor.normalize_candidate",
+        "extractor.import_uafx_bridge_export",
         "--input",
-        str(SAMPLE_WARNING),
+        str(BRIDGE_EXPORT),
         "--output",
         str(candidate_path),
     ])
-    assert normalize.returncode == 0, normalize.stderr
+    assert import_candidate.returncode == 0, import_candidate.stderr
 
     solve = run_cli(["-m", "smt.solve_candidate", "--input", str(candidate_path), "--output", str(plan_path)])
     assert solve.returncode == 0, solve.stderr
@@ -53,9 +54,27 @@ def test_end_to_end_cli_pipeline(tmp_path: Path) -> None:
             str(plan_path),
             "--output",
             str(witness_path),
+            "--syz-root",
+            str(SYZ_ROOT),
         ]
     )
     assert emit.returncode == 0, emit.stderr
+
+    validate = run_cli(
+        [
+            "-m",
+            "runtime.validate_witness",
+            "--candidate",
+            str(candidate_path),
+            "--plan",
+            str(plan_path),
+            "--witness",
+            str(witness_path),
+            "--syz-root",
+            str(SYZ_ROOT),
+        ]
+    )
+    assert validate.returncode == 0, validate.stderr
 
     export_seed = run_cli(
         [
@@ -125,7 +144,9 @@ def test_end_to_end_cli_pipeline(tmp_path: Path) -> None:
     assert summary["witness_file"] == str(witness_path)
     assert candidate["candidate_id"] in proof_md
     assert candidate["candidate_id"] in witness
-    assert "KVM_CREATE_VM" in mock_program or "openat$DEV" in mock_program
+    assert "openat$kvm" in witness
+    assert "# plan_step step_index=0 event=free thread=0 timestamp=0" in witness
+    assert "KVM_CREATE_VM" in mock_program
 
 
 def test_uafx_export_and_import_cli_pipeline(tmp_path: Path) -> None:

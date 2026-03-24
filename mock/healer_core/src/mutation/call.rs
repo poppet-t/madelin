@@ -9,7 +9,7 @@ use super::{
     restore_res_ctx,
 };
 use crate::{
-    bridge_bias::protected_prefix_len,
+    bridge_bias::protected_structural_len,
     context::Context,
     corpus::CorpusWrapper,
     gen::{choose_weighted, current_builder, pop_builder, push_builder},
@@ -48,7 +48,7 @@ fn do_mutate_call_args(ctx: &mut Context, rng: &mut RngType, mut idx: usize) -> 
     let mut tries = 0;
     let mut mutated = false;
     let mut visited = HashSet::new();
-    let prefix_len = protected_prefix_len(ctx.calls.len());
+    let protected_len = protected_structural_len(ctx.target(), ctx.calls());
 
     while tries < 128 && (!mutated || rng.gen_ratio(1, 2)) {
         // restore
@@ -68,13 +68,13 @@ fn do_mutate_call_args(ctx: &mut Context, rng: &mut RngType, mut idx: usize) -> 
         restore_res_ctx(ctx, idx);
         record_call_res(&ctx.calls[idx]);
         let mut calls_backup = std::mem::take(&mut ctx.calls);
-        let protected_call = (idx < prefix_len).then(|| calls_backup[idx].clone());
+        let protected_call = (idx < protected_len).then(|| calls_backup[idx].clone());
         mutated = mutate_value(ctx, rng, arg);
         restore_call_res(&mut calls_backup[idx]);
 
-        if !allows_generated_calls(idx, ctx.calls.len(), prefix_len) {
+        if !allows_generated_calls(idx, ctx.calls.len(), protected_len) {
             debug_info!(
-                "do_mutate_call_args: rejecting helper call insertion before protected prefix"
+                "do_mutate_call_args: rejecting helper call insertion before protected scaffold"
             );
             let _ = std::mem::take(&mut ctx.calls);
             calls_backup[idx] = protected_call.unwrap();

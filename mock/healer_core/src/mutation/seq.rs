@@ -1,7 +1,7 @@
 //! Sequence level mutation.
 use super::{foreach_call_arg_mut, restore_partial_ctx, restore_res_ctx};
 use crate::{
-    bridge_bias::{protected_prefix_len, syscall_bias_multiplier},
+    bridge_bias::{protected_structural_len, syscall_bias_multiplier},
     context::Context,
     corpus::CorpusWrapper,
     gen::{gen_one_call, prog_len_range},
@@ -14,13 +14,17 @@ use crate::{
 };
 use rand::prelude::*;
 
-fn insertion_start(call_count: usize) -> usize {
-    protected_prefix_len(call_count).min(call_count)
+fn insertion_start(protected_len: usize, call_count: usize) -> usize {
+    protected_len.min(call_count)
 }
 
-fn removable_call_range(call_count: usize) -> Option<std::ops::Range<usize>> {
-    let prefix_len = protected_prefix_len(call_count);
-    (prefix_len < call_count).then_some(prefix_len..call_count)
+fn removable_call_range(protected_len: usize, call_count: usize) -> Option<std::ops::Range<usize>> {
+    let protected_len = protected_len.min(call_count);
+    (protected_len < call_count).then_some(protected_len..call_count)
+}
+
+fn protected_call_boundary(ctx: &Context<'_, '_>) -> usize {
+    protected_structural_len(ctx.target(), ctx.calls())
 }
 
 /// Select a prog from `corpus` and splice it with calls in the `ctx` randomly.
@@ -34,7 +38,7 @@ pub fn splice(ctx: &mut Context, corpus: &CorpusWrapper, rng: &mut RngType) -> (
     // mapping resource id of `calls`, continue with current `ctx.next_res_id`
     mapping_res_id(ctx, &mut calls);
     restore_partial_ctx(ctx, &calls);
-    let idx = rng.gen_range(insertion_start(ctx.calls.len())..=ctx.calls.len());
+    let idx = rng.gen_range(insertion_start(protected_call_boundary(ctx), ctx.calls.len())..=ctx.calls.len());
     debug_info!(
         "splice: splicing {} call(s) to location {}",
         calls.len(),
@@ -54,7 +58,7 @@ pub fn insert_calls(
         return (false, 99);
     }
 
-    let idx = rng.gen_range(insertion_start(ctx.calls.len())..=ctx.calls.len());
+    let idx = rng.gen_range(insertion_start(protected_call_boundary(ctx), ctx.calls.len())..=ctx.calls.len());
     restore_res_ctx(ctx, idx); // restore the resource information before call `idx`
     let (sid, op) = select_call_to_wrapper(ctx, rng, idx);
     debug_info!(
@@ -72,7 +76,7 @@ pub fn insert_calls(
 }
 
 pub fn remove_call(ctx: &mut Context, _corpus: &CorpusWrapper, rng: &mut RngType) -> (bool, usize) {
-    let Some(removable) = removable_call_range(ctx.calls.len()) else {
+    let Some(removable) = removable_call_range(protected_call_boundary(ctx), ctx.calls.len()) else {
         return (false, 99);
     };
 
@@ -169,29 +173,19 @@ mod tests {
     #[test]
     fn insertion_start_clamps_to_call_count() {
         let _guard = bias_lock().lock().unwrap();
-        set_bridge_bias(Some(BridgeBiasConfig {
-            preserve_prefix_len: 3,
-            ..BridgeBiasConfig::default()
-        }));
-
-        assert_eq!(insertion_start(6), 3);
-        assert_eq!(insertion_start(2), 2);
-
         set_bridge_bias(None);
+
+        assert_eq!(insertion_start(3, 6), 3);
+        assert_eq!(insertion_start(3, 2), 2);
     }
 
     #[test]
     fn removable_call_range_skips_protected_prefix() {
         let _guard = bias_lock().lock().unwrap();
-        set_bridge_bias(Some(BridgeBiasConfig {
-            preserve_prefix_len: 3,
-            ..BridgeBiasConfig::default()
-        }));
-
-        assert_eq!(removable_call_range(6), Some(3..6));
-        assert_eq!(removable_call_range(3), None);
-
         set_bridge_bias(None);
+
+        assert_eq!(removable_call_range(3, 6), Some(3..6));
+        assert_eq!(removable_call_range(3, 3), None);
     }
 
     #[test]

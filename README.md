@@ -8,6 +8,8 @@
 
 The current practical target is seeded arm64 KVM fuzzing.
 
+For AI/operator handoff, see [docs/ai/OPENCLAW-RUNBOOK.md](/Users/CJ/Desktop/Kernel-stuff/madelin/docs/ai/OPENCLAW-RUNBOOK.md).
+
 ## Current Verifier Scope
 
 The verifier stack is intentionally narrow today:

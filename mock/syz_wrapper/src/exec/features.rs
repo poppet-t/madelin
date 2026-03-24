@@ -1,5 +1,11 @@
 use super::*;
 use iota::iota;
+use std::{
+    io::Read,
+    process::{Output, Stdio},
+    thread::sleep,
+    time::{Duration, Instant},
+};
 use thiserror::Error;
 
 pub type Features = u64;
@@ -42,6 +48,16 @@ pub const FEATURES_NAME: [&str; 16] = [
     "802.15.4 emulation",
 ];
 
+const FEATURES_CMD_TIMEOUT: Duration = Duration::from_secs(15);
+
+#[derive(Debug, Error)]
+enum CommandRunError {
+    #[error("io: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("timed out after {timeout:?} running {cmd}")]
+    Timeout { cmd: String, timeout: Duration },
+}
+
 #[derive(Debug, Error)]
 pub enum DetectFeaturesError {
     #[error("io: {0}")]
@@ -52,7 +68,9 @@ pub enum DetectFeaturesError {
 
 pub fn detect_features(mut cmd: Command) -> Result<Features, DetectFeaturesError> {
     cmd.arg("check");
-    let output = cmd.output()?;
+    let cmd_display = format!("{cmd:?}");
+    let output = run_command_with_timeout(cmd, FEATURES_CMD_TIMEOUT)
+        .map_err(command_run_to_detect_error)?;
     if output.status.success() {
         let out = output.stdout;
         assert_eq!(out.len(), 8);
@@ -62,8 +80,8 @@ pub fn detect_features(mut cmd: Command) -> Result<Features, DetectFeaturesError
     } else {
         let err = String::from_utf8_lossy(&output.stderr).into_owned();
         Err(DetectFeaturesError::Detect(format!(
-            "'{:?}' : {}",
-            cmd, err
+            "'{}': {}",
+            cmd_display, err
         )))
     }
 }
@@ -83,16 +101,82 @@ pub fn setup_features(mut cmd: Command, features: Features) -> Result<(), SetupF
     }
 
     cmd.arg("setup").args(&feature_args);
-    let output = cmd.output()?;
+    let cmd_display = format!("{cmd:?}");
+    let output = run_command_with_timeout(cmd, FEATURES_CMD_TIMEOUT)
+        .map_err(command_run_to_setup_error)?;
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr).into_owned();
         return Err(SetupFeaturesError::Setup(format!(
-            "failed to run '{:?}': {}",
-            cmd, err
+            "failed to run '{}': {}",
+            cmd_display, err
         )));
     }
 
     Ok(())
+}
+
+fn run_command_with_timeout(
+    mut cmd: Command,
+    timeout: Duration,
+) -> Result<Output, CommandRunError> {
+    let cmd_display = format!("{cmd:?}");
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let start = Instant::now();
+
+    loop {
+        if let Some(status) = child.try_wait()? {
+            let mut stdout = Vec::new();
+            if let Some(mut pipe) = child.stdout.take() {
+                pipe.read_to_end(&mut stdout)?;
+            }
+
+            let mut stderr = Vec::new();
+            if let Some(mut pipe) = child.stderr.take() {
+                pipe.read_to_end(&mut stderr)?;
+            }
+
+            return Ok(Output {
+                status,
+                stdout,
+                stderr,
+            });
+        }
+
+        if start.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(CommandRunError::Timeout {
+                cmd: cmd_display,
+                timeout,
+            });
+        }
+
+        sleep(Duration::from_millis(100));
+    }
+}
+
+fn command_run_to_detect_error(err: CommandRunError) -> DetectFeaturesError {
+    match err {
+        CommandRunError::Io(err) => DetectFeaturesError::Io(err),
+        CommandRunError::Timeout { cmd, timeout } => {
+            DetectFeaturesError::Detect(format!(
+                "timed out after {timeout:?} running '{cmd}'"
+            ))
+        }
+    }
+}
+
+fn command_run_to_setup_error(err: CommandRunError) -> SetupFeaturesError {
+    match err {
+        CommandRunError::Io(err) => SetupFeaturesError::Io(err),
+        CommandRunError::Timeout { cmd, timeout } => SetupFeaturesError::Setup(format!(
+            "timed out after {timeout:?} running '{cmd}'"
+        )),
+    }
 }
 
 fn features_to_args(features: Features) -> Vec<String> {

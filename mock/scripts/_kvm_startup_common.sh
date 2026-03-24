@@ -135,3 +135,43 @@ finally:
 print(f"{status} (optional for startup/short runs)")
 PY
 }
+
+run_ssh() {
+  local ssh_key="$1"
+  local ssh_port="$2"
+  shift 2
+
+  ssh \
+    -F /dev/null \
+    -o BatchMode=yes \
+    -o ConnectTimeout=5 \
+    -o ConnectionAttempts=1 \
+    -o ServerAliveInterval=5 \
+    -o ServerAliveCountMax=1 \
+    -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -i "$ssh_key" \
+    -p "$ssh_port" \
+    "$@"
+}
+
+run_scp() {
+  local ssh_key="$1"
+  local ssh_port="$2"
+  shift 2
+
+  scp \
+    -F /dev/null \
+    -o BatchMode=yes \
+    -o ConnectTimeout=5 \
+    -o ConnectionAttempts=1 \
+    -o ServerAliveInterval=5 \
+    -o ServerAliveCountMax=1 \
+    -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -i "$ssh_key" \
+    -P "$ssh_port" \
+    "$@"
+}
