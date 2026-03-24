@@ -1,0 +1,23 @@
+resource fd_kvm[fd]
+resource fd_kvmvm[fd]
+resource fd_kvmcpu[fd]
+
+openat$kvm(fd const[AT_FDCWD], file ptr[in, string["/dev/kvm"]], flags flags[open_flags], mode const[0]) fd_kvm
+
+ioctl$KVM_CREATE_VM(fd fd_kvm, cmd const[KVM_CREATE_VM], type const[0]) fd_kvmvm
+ioctl$KVM_CREATE_VCPU(fd fd_kvmvm, cmd const[KVM_CREATE_VCPU], id intptr[0:2]) fd_kvmcpu
+ioctl$KVM_RUN(fd fd_kvmcpu, cmd const[KVM_RUN], arg const[0])
+ioctl$KVM_SET_ONE_REG(fd fd_kvmcpu, cmd const[KVM_SET_ONE_REG], arg ptr[in, kvm_one_reg])
+ioctl$KVM_GET_ONE_REG(fd fd_kvmcpu, cmd const[KVM_GET_ONE_REG], arg ptr[in, kvm_one_reg])
+ioctl$KVM_ARM_VCPU_INIT(fd fd_kvmcpu, cmd const[KVM_ARM_VCPU_INIT], arg ptr[in, kvm_vcpu_init])
+
+kvm_vcpu_init {
+	target flags[kvm_vcpu_target, int32]
+	feature flags[kvm_vcpu_features_arm64, int32]
+	pad array[const[0, int32], 6]
+}
+
+kvm_one_reg {
+	id int64
+	addr int64
+}

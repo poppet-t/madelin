@@ -191,14 +191,22 @@ pub fn boot(mut config: Config) -> anyhow::Result<()> {
     }
     config.fixup();
     let mut qemu = QemuHandle::with_config(config.qemu_config.clone());
+    log::info!("preboot: starting qemu.boot()");
     let boot_duration = qemu.boot().context("failed to boot qemu")?;
+    log::info!("preboot: completed qemu.boot()");
     log::info!("boot cost around {}s", boot_duration.as_secs());
 
+    log::info!("preboot: starting scp_to_vm()");
     let remote_exec_path = scp_to_vm(&config.syz_executor(), &qemu)?;
+    log::info!(
+        "preboot: completed scp_to_vm() -> {}",
+        remote_exec_path.display()
+    );
     config.remote_exec = Some(remote_exec_path.clone());
     let ssh_syz = ssh_syz_cmd(&remote_exec_path, &qemu);
-    log::info!("detecting features...");
+    log::info!("preboot: starting detect_features()");
     let features = detect_features(ssh_syz).context("failed to detect features")?;
+    log::info!("preboot: completed detect_features()");
     config.exec_config.as_mut().unwrap().features = features;
     config.features = Some(features);
     for (i, feature) in FEATURES_NAME.iter().enumerate() {
@@ -209,13 +217,17 @@ pub fn boot(mut config: Config) -> anyhow::Result<()> {
 
     log::info!("pre-setup one executor...");
     let ssh_syz = ssh_syz_cmd(&remote_exec_path, &qemu);
+    log::info!("preboot: starting setup_features()");
     setup_features(ssh_syz, features).context("failed to setup features")?;
+    log::info!("preboot: completed setup_features()");
     features_to_env_flags(features, &mut config.exec_config.as_mut().unwrap().env);
     let exec_config = config.exec_config.take().unwrap();
     config.exec_config = Some(exec_config.clone()); // clear the shm
     let mut executor = ExecutorHandle::with_config(exec_config);
+    log::info!("preboot: starting spawn_syz()");
     spawn_syz(&remote_exec_path, &mut qemu, &mut executor, &config)
         .context("failed to spawn executor for fuzzer-0")?;
+    log::info!("preboot: completed spawn_syz()");
     log::info!("ok, fuzzer-0 should be ready");
 
     setup_signal_handler();
@@ -648,15 +660,26 @@ fn prepare_exec_env(
     exec: &mut ExecutorHandle,
 ) -> anyhow::Result<()> {
     let exec_config = config.exec_config.as_ref().unwrap();
+    let fuzzer_id = exec_config.pid;
+    log::info!("executor-prep[{fuzzer_id}]: starting qemu.boot()");
     retry_exec(|| qemu.boot())
         .with_context(|| format!("failed boot qemu for fuzzer-{}", exec_config.pid))?;
+    log::info!("executor-prep[{fuzzer_id}]: completed qemu.boot()");
+    log::info!("executor-prep[{fuzzer_id}]: starting scp_to_vm()");
     let remote_exec_path = retry_exec(|| scp_to_vm(&config.syz_executor(), qemu))?;
+    log::info!(
+        "executor-prep[{fuzzer_id}]: completed scp_to_vm() -> {}",
+        remote_exec_path.display()
+    );
     config.remote_exec = Some(remote_exec_path.clone());
+    log::info!("executor-prep[{fuzzer_id}]: starting setup_features()");
     retry_exec(|| {
         let ssh_syz = ssh_syz_cmd(&remote_exec_path, qemu);
         setup_features(ssh_syz, exec_config.features)
     })
     .context("failed to setup features")?;
+    log::info!("executor-prep[{fuzzer_id}]: completed setup_features()");
+    log::info!("executor-prep[{fuzzer_id}]: starting spawn_syz()");
     let r = spawn_syz(&remote_exec_path, qemu, exec, config);
     if r.is_err() {
         retry_exec(|| {
@@ -671,6 +694,8 @@ fn prepare_exec_env(
             }
         })
         .with_context(|| format!("failed to spawn executor for fuzzer-{}", exec_config.pid))?
+    } else {
+        log::info!("executor-prep[{fuzzer_id}]: completed spawn_syz()");
     }
     Ok(())
 }

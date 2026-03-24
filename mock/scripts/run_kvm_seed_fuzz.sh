@@ -17,6 +17,7 @@ SEED_WORKDIR="$MOCK_ROOT/seed_workdir"
 OUTPUT_DIR="$MOCK_ROOT/output-kvm-seeded"
 SYZ_DIR_OVERRIDE=""
 POSITIONAL=()
+BRIDGE_ROOT="$(default_bridge_root)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -97,8 +98,25 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 cd "$MOCK_ROOT"
+RUN_STARTED_AT="$(date +%s)"
 "${CMD[@]}"
+RUN_FINISHED_AT="$(date +%s)"
+WALL_SECONDS="$((RUN_FINISHED_AT - RUN_STARTED_AT))"
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   printf 'Dry-run summary written to: %s\n' "$DEBUG_SUMMARY_JSON"
+  exit 0
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+  if ! python3 -m verdict.emit_verdict \
+    --output-dir "$OUTPUT_DIR" \
+    --seed-workdir "$SEED_WORKDIR" \
+    --bridge-root "$BRIDGE_ROOT" \
+    --wall-seconds "$WALL_SECONDS"
+  then
+    note "verdict emission failed; fuzzing output remains available in $OUTPUT_DIR"
+  fi
+else
+  note "python3 not found; skipping verdict emission"
 fi
