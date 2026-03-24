@@ -1,8 +1,0 @@
-common
-extractor
-mapping
-mock_adapter
-proof
-runtime
-smt
-uafx_fork

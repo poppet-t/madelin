@@ -3,16 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+source "$ROOT/scripts/_bridge_python.sh"
 
-if [[ -x "$ROOT/.venv_ci/bin/python" ]]; then
-  PYTHON="$ROOT/.venv_ci/bin/python"
-elif [[ -x "$ROOT/.venv_sys/bin/python" ]]; then
-  PYTHON="$ROOT/.venv_sys/bin/python"
-elif [[ -x "$ROOT/.venv/bin/python" ]]; then
-  PYTHON="$ROOT/.venv/bin/python"
-else
-  PYTHON="python3"
-fi
+PYTHON="$(select_bridge_python "$ROOT")"
 
 INPUT="uafx_fork/samples/raw_uafx_kvm_warning.json"
 EXPORT="out/uafx_kvm_bridge_export.json"
@@ -23,8 +16,11 @@ SEED="out/uafx_kvm_mock_seed.json"
 ADAPTER="out/uafx_kvm_mock_adapter.json"
 PROGRAM="out/uafx_kvm_mock_program.txt"
 PROOF_DIR="out/uafx_kvm_proof"
+SYZ_ROOT="tests/fixtures/syzkaller"
 
 printf 'Using Python: %s\n' "$PYTHON"
+printf '[preflight] Checking bridge environment...\n'
+"$PYTHON" scripts/check_env.py
 printf '[1/8] Exporting bridge candidate...\n'
 
 "$PYTHON" -m uafx_fork.tools.export_bridge_candidate \
@@ -45,7 +41,8 @@ printf '[4/8] Emitting witness scaffold...\n'
 "$PYTHON" -m runtime.emit_witness_syz \
   --candidate "$CANDIDATE" \
   --plan "$PLAN" \
-  --output "$WITNESS"
+  --output "$WITNESS" \
+  --syz-root "$SYZ_ROOT"
 
 printf '[5/8] Exporting MOCK seed...\n'
 "$PYTHON" -m runtime.export_mock_seed \

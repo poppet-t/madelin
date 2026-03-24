@@ -8,6 +8,15 @@
 
 The current practical target is seeded arm64 KVM fuzzing.
 
+## Current Verifier Scope
+
+The verifier stack is intentionally narrow today:
+
+- **Verdict layer**: current crash matching is KASAN/text-log driven and focused on candidate `loc0`/`loc1`, subsystem frames, and simple execution metadata.
+- **Runnable witness layer**: currently supports the narrow arm64 KVM subset `openat$KVM`, `KVM_CREATE_VM`, `KVM_CREATE_VCPU`, `KVM_ARM_VCPU_INIT`, `KVM_SET_ONE_REG`, `KVM_GET_ONE_REG`, and `KVM_RUN`.
+- **Harness layer**: currently supports one micro-harness family only, the arm64 KVM timer close-vs-run candidate shape (`kvm_timer_vcpu_terminate` vs `kvm_timer_should_fire` through `kvm_vcpu_ioctl`).
+- **Unsupported cases**: broader KVM device/IRQ templates, non-KVM candidates, broad subsystem expansion, and generalized semantic argument synthesis are still out of scope.
+
 ## Repository Layout
 
 - `uafx/`
@@ -44,6 +53,7 @@ cd /Users/CJ/Desktop/Kernel-stuff/madelin/uaf-bridge
 python3 -m venv .venv_ci
 source .venv_ci/bin/activate
 pip install -e .[dev]
+python scripts/check_env.py
 ```
 
 ### 2. Build `mock`
@@ -56,7 +66,8 @@ cargo build --release
 If the build fails while preparing syzkaller, install these tools first:
 
 ```bash
-wget sha384sum unzip patch make go
+wget   # or curl
+sha384sum unzip patch make go
 ```
 
 The patched syzkaller tree is expected at:
@@ -64,6 +75,11 @@ The patched syzkaller tree is expected at:
 ```bash
 mock/target/release/syz-bin
 ```
+
+If you are building on macOS and the release build does not produce `linux_arm64/syz-executor`, that is an environment limitation, not a silent success. For the arm64 KVM path you must either:
+
+- build the syzkaller tree on a Linux host, then point `SYZ_DIR` at that tree
+- or run the full arm64 KVM validation path on a Linux host directly
 
 ### 3. Generate bridge artifacts
 
@@ -120,6 +136,29 @@ The checker validates:
 
 It also reports whether the optional Django model manager is reachable.
 
+### 5b. Check witness / harness target prerequisites
+
+Witness and harness modes execute against a Linux target over SSH. Before trying those modes, run:
+
+```bash
+cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
+export SYZ_DIR="$PWD/target/release/syz-bin"
+bash scripts/check_remote_target.sh \
+  --mode both \
+  --target-host <host> \
+  --ssh-key <ssh_key>
+```
+
+The checker verifies:
+
+- SSH connectivity
+- writable remote temp space
+- readable `dmesg` or a clear failure reason
+- remote `gcc` for harness mode
+- local `syz-executor` / `syz-execprog` availability for witness mode
+
+Current witness mode uploads `syz-executor` and `syz-execprog` from local `--syz-dir`; the target does not need those tools preinstalled on its PATH.
+
 ### 6. Do a dry-run first
 
 ```bash
@@ -142,6 +181,18 @@ export SYZ_DIR="$PWD/target/release/syz-bin"
 bash scripts/run_kvm_seed_fuzz.sh --max-seconds 600 <arm64_disk_image> <ssh_key> <arm64_kernel_image>
 ```
 
+## Narrow Smoke Foundations
+
+Two conservative golden-path smoke scripts are available under the repo-root `scripts/` directory:
+
+```bash
+cd /Users/CJ/Desktop/Kernel-stuff/madelin
+bash scripts/e2e_witness_smoke.sh
+bash scripts/e2e_harness_smoke.sh
+```
+
+They always do local artifact generation first. If a real target or required runtime assets are missing, they stop after preflight or artifact generation with an explicit note instead of trying to guess around the environment.
+
 ## Runtime Assets You Must Provide
 
 This repository does not bundle the real arm64 runtime images. You still need:
@@ -151,6 +202,17 @@ This repository does not bundle the real arm64 runtime images. You still need:
 - an arm64 kernel image
 
 Without those assets, the dry-run and prereq checker can validate paths and configuration, but real fuzzing cannot start.
+
+## Bridge Python Selection
+
+The bridge-side scripts now choose the first interpreter that actually passes `uaf-bridge/scripts/check_env.py`, in this order:
+
+1. `uaf-bridge/.venv_ci/bin/python`
+2. `uaf-bridge/.venv/bin/python`
+3. `uaf-bridge/.venv_sys/bin/python`
+4. `python3`
+
+If you want to pin a specific interpreter for the bridge demo or smoke scripts, export `PYTHON=/absolute/path/to/python` before running them.
 
 ## Optional Model Manager
 
@@ -210,3 +272,6 @@ For subsystem-specific operational detail:
 - `mock/README.md`
 - `PRD.md`
 - `context.md`
+- `docs/plans/docs/plans/v2-verifier-architecture.md`
+
+`docs/plans/v2-verifier-architecture.md` now exists as a compatibility pointer because some handoffs still refer to the shorter path, but the nested `docs/plans/docs/plans/...` copy is the current canonical plan location in this workspace.

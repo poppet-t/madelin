@@ -20,6 +20,8 @@ Once all the required tools have been installed, Mock can be easily built using 
 ```
 You can find Mock and the patched Syzkaller binary tree under `target/release/syz-bin` after a successful release build. Set `SYZ_DIR` to that path, or pass `--syz-dir`, if you want the startup scripts to use a different syzkaller tree.
 
+On macOS hosts, `cargo build --release` may still stop short of a usable arm64 KVM `SYZ_DIR` because local `linux_arm64/syz-executor` builds are not supported there. When that happens, treat it as an environment blocker and point `SYZ_DIR` at a Linux-built syzkaller tree instead of claiming the path is locally runnable.
+
 # Usage
 
 ## Seed-guided arm64 KVM workflow
@@ -38,6 +40,13 @@ This repo now supports a practical bridge-guided workflow:
    - `--arch arm64`
 
 This preserves the KVM setup prefix (`/dev/kvm -> CREATE_VM -> CREATE_VCPU`), keeps KVM syscall-family focus, and prefers concurrency for `Con` flow seeds.
+
+## Verifier support matrix
+
+- **Verdict layer**: current verdicts are based on crash-text parsing plus candidate frame matching. This is honest but narrow; it does not claim full semantic crash triage.
+- **Witness execution**: current witness mode expects a narrow runnable arm64 KVM witness and uploads local `syz-executor` / `syz-execprog` from `--syz-dir` to the remote target.
+- **Harness execution**: current harness mode only supports the arm64 KVM timer close-vs-run family (`kvm_timer_vcpu_terminate` vs `kvm_timer_should_fire` via `kvm_vcpu_ioctl`).
+- **Unsupported cases**: broader KVM device/IRQ template families, non-KVM candidates, and candidates outside the narrow timer harness family fail explicitly instead of silently falling back.
 
 ### One-command seed preparation
 
@@ -73,6 +82,28 @@ The checker verifies:
 - syzkaller layout and the expected `linux_arm64/syz-executor`
 
 It also reports whether the optional Django model manager is reachable at `127.0.0.1:8000`.
+
+### Check remote witness / harness prerequisites
+
+Run this before PR3/PR4 witness or harness execution:
+
+```bash
+cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
+export SYZ_DIR="$PWD/target/release/syz-bin"
+bash scripts/check_remote_target.sh \
+  --mode both \
+  --target-host <host> \
+  --ssh-key <ssh_key>
+```
+
+What it checks:
+- SSH connectivity
+- writable remote temp dir
+- readable `dmesg`
+- remote `gcc` for harness mode
+- local `syz-executor` and `syz-execprog` for witness mode
+
+Current witness mode copies syzkaller executables from the local machine, so the remote target only needs to accept SSH/SCP and permit execution from the writable temp dir.
 
 ### Dry-run first
 
@@ -116,6 +147,18 @@ bash scripts/run_kvm_seed_fuzz.sh \
 ```
 
 The older `scripts/run_kvm_seeded_fuzz.sh` entrypoint is still available as a compatibility shim, but `run_kvm_seed_fuzz.sh` is the canonical script now.
+
+### Narrow end-to-end smoke foundations
+
+The repo-root smoke helpers encode the intended golden path for the currently supported witness and harness slices:
+
+```bash
+cd /Users/CJ/Desktop/Kernel-stuff/madelin
+bash scripts/e2e_witness_smoke.sh
+bash scripts/e2e_harness_smoke.sh
+```
+
+They can stop at preflight or artifact generation when a real target is unavailable, but they document the exact workflow for the currently supported verifier paths.
 
 ### Equivalent direct healer dry-run
 
@@ -176,7 +219,7 @@ It is only needed if you want the background language-model training endpoint to
 ```
 
 If `target/release/syz-bin` does not exist yet, either:
-- build locally and ensure the syzkaller build prerequisites are installed: `wget`, `sha384sum`, `unzip`, `patch`, `make`, and `go`
+- build locally and ensure the syzkaller build prerequisites are installed: `wget` or `curl`, `sha384sum`, `unzip`, `patch`, `make`, and `go`
 - or point `SYZ_DIR` / `--syz-dir` at an existing compatible syzkaller tree
 
 ## Bridge-seed importer

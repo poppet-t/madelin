@@ -21,6 +21,7 @@ const STABLE_CSUM: &str = "293a65f4604dce1103ca94746fec6bb175229576271ffdcd31974
 fn main() {
     if env::var("SKIP_SYZ_BUILD").is_err() {
         check_env();
+        fail_fast_if_host_cannot_build_arm64_executor();
         // TODO We cannot use the latest syz-executor any more, because `a7ce77be27d8e3728b97122a005bc5b23298cfc3` contains breaking change
         // Try to patch the latest revision first
         // const LATEST_REVISION: &str = "master";
@@ -50,10 +51,22 @@ fn main() {
     };
 }
 
+fn stable_syz_dir() -> PathBuf {
+    let out_dir = env::var("OUT_DIR").unwrap();
+    PathBuf::from(format!("{}/syzkaller-{}", out_dir, STABLE_REVISION))
+}
+
+fn has_tool(tool: &str) -> bool {
+    Command::new("which")
+        .arg(tool)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
 /// Check required tool to build Syzkaller
 fn check_env() {
-    const TOOLS: [(&str, &str); 6] = [
-        ("wget", "download syzkaller"),
+    const TOOLS: [(&str, &str); 5] = [
         ("sha384sum", "check download"),
         ("unzip", "unzip syzkaller.zip"),
         ("patch", "patch patches/*.diff"),
@@ -61,17 +74,223 @@ fn check_env() {
         ("go", "build the syzkaller"),
     ];
     let mut missing = false;
+    if !has_tool("wget") && !has_tool("curl") {
+        eprintln!("missing tool wget or curl to download syzkaller.");
+        missing = true;
+    }
     for (tool, reason) in TOOLS.iter().copied() {
-        let status = Command::new("which").arg(tool).status().unwrap();
-        if !status.success() {
-            eprintln!("missing tool {} to {}.", tool, reason);
-            missing = true;
+        if has_tool(tool) {
+            continue;
         }
+        eprintln!("missing tool {} to {}.", tool, reason);
+        missing = true;
     }
     if missing {
         eprintln!("missing tools, please install them first");
         exit(1)
     }
+}
+
+fn download_syzkaller(repo_url: &str, syz_zip: &Path) {
+    if has_tool("wget") {
+        let wget = Command::new("wget")
+            .arg("-O")
+            .arg(syz_zip.to_str().unwrap())
+            .arg(repo_url)
+            .output()
+            .unwrap_or_else(|e| {
+                eprintln!("failed to spawn wget: {}", e);
+                exit(1)
+            });
+        if !wget.status.success() {
+            let stderr = String::from_utf8(wget.stderr).unwrap_or_default();
+            eprintln!(
+                "failed to download syzkaller from: {}, error: {}",
+                repo_url, stderr
+            );
+            exit(1);
+        }
+        return;
+    }
+
+    let curl = Command::new("curl")
+        .arg("--fail")
+        .arg("--location")
+        .arg("--silent")
+        .arg("--show-error")
+        .arg("-o")
+        .arg(syz_zip.to_str().unwrap())
+        .arg(repo_url)
+        .output()
+        .unwrap_or_else(|e| {
+            eprintln!("failed to spawn curl: {}", e);
+            exit(1)
+        });
+    if !curl.status.success() {
+        let stderr = String::from_utf8(curl.stderr).unwrap_or_default();
+        eprintln!(
+            "failed to download syzkaller from: {}, error: {}",
+            repo_url, stderr
+        );
+        exit(1);
+    }
+}
+
+fn syz_runtime_layout_ready(syz_dir: &Path) -> bool {
+    [
+        syz_dir.join("bin").join("linux_arm64").join("syz-executor"),
+        syz_dir.join("bin").join("syz-repro"),
+        syz_dir.join("bin").join("syz-symbolize"),
+        syz_dir.join("bin").join("syz-execprog"),
+    ]
+    .iter()
+    .all(|path| path.is_file())
+}
+
+fn symlink_if_missing(from: &Path, to: &Path) {
+    use std::os::unix::fs::symlink;
+
+    if to.exists() {
+        return;
+    }
+    if let Err(e) = symlink(from, to) {
+        if e.kind() != ErrorKind::AlreadyExists {
+            eprintln!(
+                "failed to symlink {} -> {}: {}",
+                to.display(),
+                from.display(),
+                e
+            );
+            exit(1);
+        }
+    }
+}
+
+fn make_syz_target(syz_dir: &Path, target: &str, target_os: Option<&str>, target_arch: Option<&str>) -> bool {
+    let mut make = Command::new("make");
+    make.current_dir(syz_dir.to_str().unwrap()).arg(target);
+    if let Some(target_os) = target_os {
+        make.env("TARGETOS", target_os);
+    }
+    if let Some(target_arch) = target_arch {
+        make.env("TARGETARCH", target_arch);
+        make.env("TARGETVMARCH", target_arch);
+    }
+    let output = make.output().unwrap_or_else(|e| {
+        eprintln!("failed to spawn make: {}", e);
+        exit(1);
+    });
+    if output.status.success() {
+        return true;
+    }
+    let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+    eprintln!("failed to make {}: {}", target, stderr);
+    false
+}
+
+fn ensure_runtime_entrypoints(syz_dir: &Path) {
+    let bin_dir = syz_dir.join("bin");
+    let target_dir = bin_dir.join("linux_arm64");
+    let expected = [
+        target_dir.join("syz-executor"),
+        bin_dir.join("syz-execprog"),
+        bin_dir.join("syz-repro"),
+        bin_dir.join("syz-symbolize"),
+    ];
+    symlink_if_missing(
+        Path::new("linux_arm64").join("syz-execprog").as_path(),
+        &bin_dir.join("syz-execprog"),
+    );
+    let missing: Vec<PathBuf> = expected
+        .iter()
+        .filter(|path| !path.is_file())
+        .cloned()
+        .collect();
+    if !missing.is_empty() {
+        let missing_text = missing
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        if std::env::consts::OS == "macos" && !target_dir.join("syz-executor").is_file() {
+            eprintln!(
+                "linux/arm64 syz-executor is missing under {}. Building that executor is not supported on darwin hosts; use a Linux-built SYZ_DIR or run the build on Linux.",
+                target_dir.display()
+            );
+        }
+        eprintln!(
+            "syzkaller build did not produce the required runtime layout under {}. missing: {}",
+            bin_dir.display(),
+            missing_text
+        );
+        exit(1);
+    }
+}
+
+fn fail_fast_if_host_cannot_build_arm64_executor() {
+    if std::env::consts::OS != "macos" {
+        return;
+    }
+
+    let syz_dir = stable_syz_dir();
+    if syz_runtime_layout_ready(&syz_dir) {
+        return;
+    }
+
+    eprintln!(
+        "darwin hosts cannot build the required linux/arm64 syz-executor locally for the arm64 KVM workflow. Use a Linux-built SYZ_DIR or run this build on Linux. If you already have generated syzkaller JSON descriptions, set SKIP_SYZ_BUILD=1 and SYZ_SYS_DIR=<path>."
+    );
+    exit(1);
+}
+
+fn apply_patch_if_needed(syz_dir: &Path, patch_file: &Path) -> bool {
+    let forward = Command::new("patch")
+        .current_dir(syz_dir.to_str().unwrap())
+        .arg("--dry-run")
+        .arg("-p1")
+        .stdin(File::open(patch_file).unwrap())
+        .output()
+        .unwrap_or_else(|e| {
+            eprintln!("failed to probe patch {}: {}", patch_file.display(), e);
+            exit(1)
+        });
+    if forward.status.success() {
+        let applied = Command::new("patch")
+            .current_dir(syz_dir.to_str().unwrap())
+            .arg("-p1")
+            .stdin(File::open(patch_file).unwrap())
+            .output()
+            .unwrap_or_else(|e| {
+                eprintln!("failed to spawn patch: {}", e);
+                exit(1)
+            });
+        if applied.status.success() {
+            return true;
+        }
+        let stderr = String::from_utf8(applied.stderr).unwrap_or_default();
+        eprintln!("failde to patch {}: {}", patch_file.display(), stderr);
+        return false;
+    }
+
+    let reversed = Command::new("patch")
+        .current_dir(syz_dir.to_str().unwrap())
+        .arg("-R")
+        .arg("--dry-run")
+        .arg("-p1")
+        .stdin(File::open(patch_file).unwrap())
+        .output()
+        .unwrap_or_else(|e| {
+            eprintln!("failed to probe reverse patch {}: {}", patch_file.display(), e);
+            exit(1)
+        });
+    if reversed.status.success() {
+        println!("patch already applied: {}", patch_file.display());
+        return true;
+    }
+
+    let stderr = String::from_utf8(forward.stderr).unwrap_or_default();
+    eprintln!("failde to patch {}: {}", patch_file.display(), stderr);
+    false
 }
 
 fn download(syz_revision: &str, csum: Option<&str>) -> PathBuf {
@@ -113,23 +332,7 @@ fn download(syz_revision: &str, csum: Option<&str>) -> PathBuf {
 
     if !syz_zip.exists() {
         println!("downloading syzkaller...");
-        let wget = Command::new("wget")
-            .arg("-O")
-            .arg(syz_zip.to_str().unwrap())
-            .arg(&repo_url)
-            .output()
-            .unwrap_or_else(|e| {
-                eprintln!("failed to spawn wget: {}", e);
-                exit(1)
-            });
-        if !wget.status.success() {
-            let stderr = String::from_utf8(wget.stderr).unwrap_or_default();
-            eprintln!(
-                "failed to download syzkaller from: {}, error: {}",
-                repo_url, stderr
-            );
-            exit(1);
-        }
+        download_syzkaller(&repo_url, &syz_zip);
         if let Some(csum) = csum {
             if !check_download_csum(&syz_zip, csum) {
                 eprintln!("downloaded file {} was broken", syz_zip.display());
@@ -178,7 +381,7 @@ fn check_download_csum<P: AsRef<Path>>(syz_zip: P, expected_csum: &str) -> bool 
 }
 
 fn build_syz(syz_dir: PathBuf) -> Option<PathBuf> {
-    if !syz_dir.join("bin").exists() {
+    if !syz_runtime_layout_ready(&syz_dir) {
         let patch_dir = PathBuf::from("./patches");
         let headers = vec!["ivshm_setup.h", "features.h", "unix_sock_setup.h"];
         for header in headers {
@@ -200,45 +403,30 @@ fn build_syz(syz_dir: PathBuf) -> Option<PathBuf> {
                             patch_file.display(),
                             e
                         );
-                        exit(1)
-                    });
-                    let patch = Command::new("patch")
-                        .current_dir(syz_dir.to_str().unwrap())
-                        .arg("-p1")
-                        .stdin(File::open(&patch_file).unwrap())
-                        .output()
-                        .unwrap_or_else(|e| {
-                            eprintln!("failed to spawn git: {}", e);
                             exit(1)
-                        });
-                    if !patch.status.success() {
-                        let stderr = String::from_utf8(patch.stderr).unwrap_or_default();
-                        eprintln!("failde to patch {}: {}", patch_file.display(), stderr);
+                    });
+                    if !apply_patch_if_needed(&syz_dir, &patch_file) {
                         return None;
                     }
                 }
             }
         }
 
-        let targets = vec!["executor", "fuzzer", "execprog", "repro", "symbolize"];
-        for target in targets {
-            let make = Command::new("make")
-                .current_dir(syz_dir.to_str().unwrap())
-                .arg(target)
-                .output()
-                .unwrap_or_else(|e| {
-                    eprintln!("failed to spawn make: {}", e);
-                    exit(1);
-                });
-            if !make.status.success() {
-                let stderr = String::from_utf8(make.stderr).unwrap_or_default();
-                eprintln!("failed to make {}: {}", target, stderr);
+        for target in ["executor", "fuzzer", "execprog", "stress"] {
+            if !make_syz_target(&syz_dir, target, Some("linux"), Some("arm64")) {
                 return None;
             }
         }
+        for target in ["repro", "symbolize"] {
+            if !make_syz_target(&syz_dir, target, Some("linux"), Some("arm64")) {
+                return None;
+            }
+        }
+        ensure_runtime_entrypoints(&syz_dir);
         println!("cargo:rerun-if-changed={}", syz_dir.join("bin").display());
     }
 
+    ensure_runtime_entrypoints(&syz_dir);
     copy_patched_syz_bin(&syz_dir);
     let sys_dir = syz_dir.join("sys").join("json");
     assert!(sys_dir.exists());
