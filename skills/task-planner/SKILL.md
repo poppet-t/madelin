@@ -8,8 +8,10 @@ description: Turn a request into the smallest safe execution plan with explicit 
 ## Use this when
 - the task is non-trivial
 - the request spans multiple files
+- the task touches architecture boundaries
 - implementation should be staged
 - validation needs to be planned before coding
+- the user asks for planning, sequencing, or implementation strategy
 
 ## Read first
 - `AGENTS.md`

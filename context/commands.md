@@ -1,26 +1,27 @@
 # Commands
 
-## Environment checks
-- `python3 uaf-bridge/scripts/check_env.py`
-- `bash mock/scripts/check_remote_target.sh`
+## Read and map repo
+- tree -L 3
+- find . -maxdepth 3 -type f | sort
 
-## Narrow smoke paths
-- `bash scripts/e2e_witness_smoke.sh`
-- `bash scripts/e2e_harness_smoke.sh`
+## Existing bridge validation
+- python3 -m uaf-bridge.extractor
+- python3 uaf-bridge/smt/solve_candidate.py
+- python3 uaf-bridge/runtime/emit_witness_syz.py
 
-## Bridge flow
-- `python3 -m extractor ...`
-- `python3 uaf-bridge/smt/solve_candidate.py ...`
-- `python3 uaf-bridge/runtime/emit_witness_syz.py ...`
+## Backend schema validation
+- python3 backend/syz-guided/state_model/validate_state_model.py <path>
+- python3 -m pytest backend/syz-guided/tests/test_state_model.py
 
-## Demo path
-- `bash uaf-bridge/scripts/run_end_to_end_kvm_demo.sh`
+## Seed generation smoke
+- python3 backend/syz-guided/seedgen/synthesize_seeds.py --candidate out/.../candidate.json --witness out/.../witness_plan.json
+- bash backend/syz-guided/scripts/smoke_seedgen.sh
 
-## MOCK-side import
-- `python3 mock/tools/import_bridge_seed.py ...`
+## Campaign smoke
+- bash backend/syz-guided/scripts/smoke_campaign.sh
 
-## What to run first
-1. environment preflight
-2. narrow smoke relevant to touched stage
-3. stage-specific validation
-4. broader end-to-end demo only if needed
+## Triage smoke
+- bash backend/syz-guided/scripts/smoke_triage.sh
+
+## End-to-end candidate run
+- bash backend/syz-guided/scripts/run_kvm_candidate.sh <candidate_dir>

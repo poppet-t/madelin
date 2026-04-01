@@ -1,0 +1,61 @@
+{
+  "$id": "https://madelin.local/schemas/relation_graph_v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Relation Graph v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidate_id",
+    "schema_version",
+    "nodes",
+    "edges",
+    "mutation_constraints"
+  ],
+  "properties": {
+    "candidate_id": { "type": "string" },
+    "schema_version": { "const": "relation_graph/v1", "type": "string" },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "phase"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["resource", "syscall"] },
+          "phase": { "enum": ["bootstrap", "configure", "trigger"] },
+          "call": { "type": "string" },
+          "resource": { "type": "string" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "type"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "type": { "enum": ["resource_flow", "must_precede"] },
+          "resource": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "mutation_constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule", "description"],
+        "properties": {
+          "rule": { "type": "string" },
+          "scope": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

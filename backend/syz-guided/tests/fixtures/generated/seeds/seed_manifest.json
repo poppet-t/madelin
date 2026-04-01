@@ -1,0 +1,24 @@
+{
+  "candidate_id": "cand_59fda0076e3243f2",
+  "immutable_prefix_len": 3,
+  "schema_version": "seed_manifest/v1",
+  "seed_count": 4,
+  "seeds": [
+    {
+      "call_count": 7,
+      "name": "seed_full_run.prog"
+    },
+    {
+      "call_count": 8,
+      "name": "seed_run_close.prog"
+    },
+    {
+      "call_count": 8,
+      "name": "seed_double_run.prog"
+    },
+    {
+      "call_count": 7,
+      "name": "seed_close_only.prog"
+    }
+  ]
+}

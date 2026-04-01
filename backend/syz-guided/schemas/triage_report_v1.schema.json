@@ -1,0 +1,90 @@
+{
+  "$id": "https://madelin.local/schemas/triage_report_v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Triage Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidate_id",
+    "schema_version",
+    "crash_id",
+    "timestamp",
+    "crash_summary",
+    "candidate_match",
+    "state_summary",
+    "verdict",
+    "evidence"
+  ],
+  "properties": {
+    "candidate_id": { "type": "string" },
+    "schema_version": { "const": "triage_report/v1", "type": "string" },
+    "crash_id": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "crash_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "allocator", "stack_frames"],
+      "properties": {
+        "type": { "type": "string" },
+        "allocator": { "type": ["string", "null"] },
+        "stack_frames": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "candidate_match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "focus_frame_hit",
+        "focus_file_hit",
+        "free_use_hint_match",
+        "uaf_type_match",
+        "match_score"
+      ],
+      "properties": {
+        "focus_frame_hit": { "type": "boolean" },
+        "focus_file_hit": { "type": "boolean" },
+        "free_use_hint_match": { "type": "boolean" },
+        "uaf_type_match": { "type": "boolean" },
+        "match_score": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "state_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prefix_valid",
+        "resource_chain_intact",
+        "phase_reached",
+        "order_preserved"
+      ],
+      "properties": {
+        "prefix_valid": { "type": "boolean" },
+        "resource_chain_intact": { "type": "boolean" },
+        "phase_reached": { "enum": ["bootstrap", "configure", "trigger", "unknown"] },
+        "order_preserved": { "type": "boolean" }
+      }
+    },
+    "verdict": {
+      "enum": ["confirmed", "plausible", "unrelated", "insufficient_data"]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_crash_excerpt", "matched_frames", "matched_files"],
+      "properties": {
+        "raw_crash_excerpt": { "type": "string" },
+        "matched_frames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "matched_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

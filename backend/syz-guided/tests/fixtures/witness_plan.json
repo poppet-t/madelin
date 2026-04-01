@@ -1,0 +1,145 @@
+{
+  "barriers": [
+    {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "Pointer must escape before later fetch/use chain."
+    },
+    {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "VCPU timer context must be installed before it can be fetched from ioctl-side logic."
+    },
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "Cross-entry UAF requires timer teardown to occur before later timer use."
+    },
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "Use-after-free requires free to occur before use."
+    }
+  ],
+  "candidate_id": "cand_59fda0076e3243f2",
+  "debug": {
+    "check_result": "sat",
+    "encoded_event_count": 6,
+    "encoded_events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "input_mapping_confidence": "manual",
+    "soft_constraints": [
+      "prefer_split_threads: free/use on different threads when feasible"
+    ],
+    "solver": "z3.Optimize",
+    "unsat_reasons": []
+  },
+  "execution_hints": {
+    "candidate_flow": "Con",
+    "entry_selection": {
+      "entry_func": "kvm_vcpu_ioctl",
+      "entry_kind": "file_ioctl",
+      "template_id": "kvm_vcpu_ioctl:file_ioctl:kvm-arm64:regs:v1"
+    },
+    "min_threads": 2,
+    "notes": [
+      "Structural witness only: ordering, thread assignment, and readiness predicates are encoded.",
+      "Exact syscall argument synthesis remains intentionally out of scope for v1."
+    ]
+  },
+  "ordered_steps": [
+    {
+      "event": "free",
+      "step_index": 0,
+      "timestamp": 0
+    },
+    {
+      "event": "use",
+      "step_index": 1,
+      "timestamp": 1
+    },
+    {
+      "event": "escape",
+      "step_index": 2,
+      "timestamp": 2
+    },
+    {
+      "event": "cleanup",
+      "step_index": 3,
+      "timestamp": 3
+    },
+    {
+      "event": "fetch",
+      "step_index": 4,
+      "timestamp": 4
+    },
+    {
+      "event": "init_resource",
+      "step_index": 5,
+      "timestamp": 5
+    }
+  ],
+  "predicates": [
+    {
+      "must_hold_at": "fetch",
+      "name": "kvm_vcpu_fd_ready",
+      "scope": "heuristic"
+    },
+    {
+      "must_hold_at": "escape",
+      "name": "kvm_vm_fd_ready",
+      "scope": "heuristic"
+    }
+  ],
+  "sat": true,
+  "schema_version": "witness_plan/v1",
+  "status": "sat",
+  "threads": [
+    {
+      "steps": [
+        {
+          "event": "free",
+          "step_index": 0,
+          "timestamp": 0
+        },
+        {
+          "event": "escape",
+          "step_index": 2,
+          "timestamp": 2
+        },
+        {
+          "event": "cleanup",
+          "step_index": 3,
+          "timestamp": 3
+        },
+        {
+          "event": "fetch",
+          "step_index": 4,
+          "timestamp": 4
+        },
+        {
+          "event": "init_resource",
+          "step_index": 5,
+          "timestamp": 5
+        }
+      ],
+      "thread_id": 0
+    },
+    {
+      "steps": [
+        {
+          "event": "use",
+          "step_index": 1,
+          "timestamp": 1
+        }
+      ],
+      "thread_id": 1
+    }
+  ]
+}
