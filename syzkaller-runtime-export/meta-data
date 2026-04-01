@@ -1,0 +1,2 @@
+instance-id: arm64-kvm-fuzz
+local-hostname: arm64-kvm-fuzz

@@ -1,0 +1,19 @@
+Runtime environment export for arm64 syzkaller isolated mode
+
+Main files:
+- Image
+- arm64-isolated-overlay.qcow2
+- seed.img
+- id_rsa
+- id_rsa.pub
+- arm64-kvm-isolated.cfg
+- run_syzkaller_arm64.sh
+- user-data
+- meta-data
+
+Expected SSH target:
+- root@127.0.0.1:10022
+
+Expected boot style:
+- manual QEMU boot first
+- syz-manager attaches in isolated mode

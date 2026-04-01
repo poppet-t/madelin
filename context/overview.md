@@ -1,31 +1,28 @@
 # Overview
 
-## What this repository is for
-This repository implements a prototype UAF witness bridge that connects:
-1. static warning output
-2. normalized candidate extraction
-3. SMT-based structural feasibility solving
-4. runtime witness or seed emission
-5. downstream MOCK-oriented fuzzing handoff
+## Project purpose
 
-## Current emphasis
-The current implementation is intentionally narrow and optimized for:
-- stable artifact contracts
-- deterministic transforms up to runtime
-- explicit unsupported-case handling
-- Linux arm64 KVM-oriented entry families and demos
+Madelin is an artifact-driven research codebase for turning UAFX-discovered cross-entry UAF candidates into dynamic validation attempts.
 
-## What success looks like
-A successful change:
-- preserves cross-stage contracts
-- keeps schema drift controlled
-- improves witness feasibility or runtime usefulness
-- remains reviewable and testable
-- does not broaden the system accidentally
+## Current product direction
 
-## What to avoid
-- architecture rewrites during implementation tasks
-- silent schema changes
-- hidden changes to ordering semantics
-- “helpful” generalization that breaks narrow supported paths
-- mixing planning, implementation, and review in one uncontrolled pass
+The active direction is a narrow runnable backend for Linux arm64 KVM:
+
+UAFX
+→ bridge / witness planner
+→ state-aware syzkaller backend
+→ candidate-aware crash triage / repro
+
+## Why this exists
+
+UAFX is strong at statically finding cross-entry UAF candidates and reasoning about feasibility, but it does not execute the kernel.
+The runtime backend must preserve state, preserve resource chains, steer toward candidate targets, and triage results against the original candidate.
+
+## v1 scope
+
+- Linux
+- syzkaller-based execution
+- KASAN/KCOV-backed feedback
+- arm64 KVM-oriented resource chain
+- sequential cross-entry candidates with simple hard-order constraints
+- candidate-aware crash triage

@@ -1,0 +1,136 @@
+{
+  "$id": "https://madelin.local/schemas/state_model_v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "State Model v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidate_id",
+    "schema_version",
+    "subsystem",
+    "arch",
+    "target_family",
+    "source_artifacts",
+    "loc0",
+    "loc1",
+    "resource_chain",
+    "phases",
+    "precedence_edges",
+    "sticky_calls",
+    "immutable_prefix_len",
+    "favored_suffix_calls",
+    "score_weights"
+  ],
+  "properties": {
+    "candidate_id": { "type": "string" },
+    "schema_version": { "const": "state_model/v1", "type": "string" },
+    "subsystem": { "type": "string" },
+    "arch": { "type": "string" },
+    "target_family": { "type": "string" },
+    "source_artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_path", "witness_plan_path"],
+      "properties": {
+        "candidate_path": { "type": "string" },
+        "witness_plan_path": { "type": "string" }
+      }
+    },
+    "loc0": { "$ref": "#/$defs/location" },
+    "loc1": { "$ref": "#/$defs/location" },
+    "resource_chain": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource", "type", "producer_call"],
+        "properties": {
+          "resource": { "type": "string" },
+          "type": { "type": "string" },
+          "producer_call": { "type": "string" },
+          "consumer_calls": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "phases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bootstrap", "configure", "trigger"],
+      "properties": {
+        "bootstrap": { "$ref": "#/$defs/phase" },
+        "configure": { "$ref": "#/$defs/phase" },
+        "trigger": { "$ref": "#/$defs/phase" }
+      }
+    },
+    "precedence_edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["before", "after", "reason"],
+        "properties": {
+          "before": { "type": "string" },
+          "after": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "sticky_calls": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "immutable_prefix_len": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "favored_suffix_calls": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "score_weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prefix_valid",
+        "resource_chain",
+        "phase_progress",
+        "target_signal",
+        "order_preserved"
+      ],
+      "properties": {
+        "prefix_valid": { "type": "number", "minimum": 0 },
+        "resource_chain": { "type": "number", "minimum": 0 },
+        "phase_progress": { "type": "number", "minimum": 0 },
+        "target_signal": { "type": "number", "minimum": 0 },
+        "order_preserved": { "type": "number", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["function", "file", "line"],
+      "properties": {
+        "function": { "type": ["string", "null"] },
+        "file": { "type": ["string", "null"] },
+        "line": { "type": ["integer", "null"] }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calls", "description"],
+      "properties": {
+        "calls": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "description": { "type": "string" }
+      }
+    }
+  }
+}

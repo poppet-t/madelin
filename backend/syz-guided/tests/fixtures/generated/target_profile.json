@@ -1,0 +1,52 @@
+{
+  "candidate_id": "cand_59fda0076e3243f2",
+  "candidate_signal_rules": [
+    {
+      "description": "KASAN use-after-free report with stack frame in focus_frames",
+      "rule": "kasan_uaf_in_focus_frame"
+    },
+    {
+      "description": "KASAN use-after-free report with source file in focus_files",
+      "rule": "kasan_uaf_in_focus_file"
+    },
+    {
+      "description": "Crash stack matches loc0 (free) or loc1 (use) function names",
+      "rule": "free_use_site_match"
+    }
+  ],
+  "focus_files": [
+    "arch/arm64/kvm/arch_timer.c"
+  ],
+  "focus_frames": [
+    "kvm_timer_vcpu_terminate",
+    "kvm_vcpu_release",
+    "destroy_hrtimer",
+    "kvm_timer_should_fire",
+    "kvm_vcpu_ioctl",
+    "kvm_timer_flush_hwstate"
+  ],
+  "free_use_hints": [
+    {
+      "file": "arch/arm64/kvm/arch_timer.c",
+      "function": "kvm_timer_vcpu_terminate",
+      "line": 812,
+      "role": "free"
+    },
+    {
+      "file": "arch/arm64/kvm/arch_timer.c",
+      "function": "kvm_timer_should_fire",
+      "line": 923,
+      "role": "use"
+    }
+  ],
+  "preferred_syscalls": [
+    "openat$KVM",
+    "ioctl$KVM_CREATE_VM",
+    "ioctl$KVM_CREATE_VCPU",
+    "ioctl$KVM_ARM_VCPU_INIT",
+    "ioctl$KVM_RUN",
+    "ioctl$KVM_SET_ONE_REG",
+    "ioctl$KVM_GET_ONE_REG"
+  ],
+  "schema_version": "target_profile/v1"
+}

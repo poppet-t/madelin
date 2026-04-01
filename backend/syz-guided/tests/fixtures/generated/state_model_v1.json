@@ -1,0 +1,116 @@
+{
+  "arch": "arm64",
+  "candidate_id": "cand_59fda0076e3243f2",
+  "favored_suffix_calls": [
+    "ioctl$KVM_RUN",
+    "close$KVM"
+  ],
+  "immutable_prefix_len": 3,
+  "loc0": {
+    "file": "arch/arm64/kvm/arch_timer.c",
+    "function": "kvm_timer_vcpu_terminate",
+    "line": 812
+  },
+  "loc1": {
+    "file": "arch/arm64/kvm/arch_timer.c",
+    "function": "kvm_timer_should_fire",
+    "line": 923
+  },
+  "phases": {
+    "bootstrap": {
+      "calls": [
+        "openat$KVM",
+        "ioctl$KVM_CREATE_VM",
+        "ioctl$KVM_CREATE_VCPU"
+      ],
+      "description": "Resource-producing calls that create KVM fd chain"
+    },
+    "configure": {
+      "calls": [
+        "ioctl$KVM_ARM_VCPU_INIT",
+        "ioctl$KVM_SET_ONE_REG",
+        "ioctl$KVM_GET_ONE_REG"
+      ],
+      "description": "VCPU initialization and register configuration"
+    },
+    "trigger": {
+      "calls": [
+        "ioctl$KVM_RUN"
+      ],
+      "description": "Execution and teardown calls that may trigger free/use"
+    }
+  },
+  "precedence_edges": [
+    {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "Pointer must escape before later fetch/use chain."
+    },
+    {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "VCPU timer context must be installed before it can be fetched from ioctl-side logic."
+    },
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "Cross-entry UAF requires timer teardown to occur before later timer use."
+    },
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "Use-after-free requires free to occur before use."
+    }
+  ],
+  "resource_chain": [
+    {
+      "consumer_calls": [
+        "ioctl$KVM_CREATE_VM"
+      ],
+      "producer_call": "openat$KVM",
+      "resource": "fd_kvm",
+      "type": "fd"
+    },
+    {
+      "consumer_calls": [
+        "ioctl$KVM_CREATE_VCPU"
+      ],
+      "producer_call": "ioctl$KVM_CREATE_VM",
+      "resource": "fd_vm",
+      "type": "fd"
+    },
+    {
+      "consumer_calls": [
+        "ioctl$KVM_ARM_VCPU_INIT",
+        "ioctl$KVM_SET_ONE_REG",
+        "ioctl$KVM_GET_ONE_REG",
+        "ioctl$KVM_RUN"
+      ],
+      "producer_call": "ioctl$KVM_CREATE_VCPU",
+      "resource": "fd_vcpu",
+      "type": "fd"
+    }
+  ],
+  "schema_version": "state_model/v1",
+  "score_weights": {
+    "order_preserved": 0.1,
+    "phase_progress": 0.2,
+    "prefix_valid": 0.3,
+    "resource_chain": 0.25,
+    "target_signal": 0.15
+  },
+  "source_artifacts": {
+    "candidate_path": "backend/syz-guided/tests/fixtures/candidate.json",
+    "witness_plan_path": "backend/syz-guided/tests/fixtures/witness_plan.json"
+  },
+  "sticky_calls": [
+    "openat$KVM",
+    "ioctl$KVM_CREATE_VM",
+    "ioctl$KVM_CREATE_VCPU",
+    "ioctl$KVM_ARM_VCPU_INIT",
+    "ioctl$KVM_SET_ONE_REG",
+    "ioctl$KVM_GET_ONE_REG"
+  ],
+  "subsystem": "kvm",
+  "target_family": "kvm-arm64-narrow"
+}

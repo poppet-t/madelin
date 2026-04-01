@@ -1,27 +1,27 @@
 # Invariants
 
-## Contract invariants
-- Preserve the pipeline contract:
-  `warning -> candidate.json -> witness_plan.json -> emitted scaffold / imported seed`
-- Do not rename or remove schema fields without explicit authorization.
-- If a schema must change, update every affected producer, consumer, validator, and smoke path.
+## Hard contract invariants
 
-## Solver invariants
-- Use stock Z3 behavior.
-- Keep solver encoding focused on structural feasibility, not speculative semantics.
-- Preserve ordering and resource predicates where they are already part of the candidate model.
+- `candidate.json` field meanings must not change silently.
+- `witness_plan.json` field meanings must not change silently.
+- Ordering semantics must not change silently.
+- Runtime artifacts must reference their source artifacts.
 
-## Runtime invariants
-- Preserve deterministic emission for identical candidate + witness-plan inputs.
-- Do not move dynamic healing logic earlier into the bridge.
-- Keep stable ordering and resource prefixes visible to downstream tooling.
+## Scope invariants
 
-## Support-boundary invariants
-- Keep narrow support explicit.
-- Unsupported cases must fail clearly.
-- Do not silently widen support without tests and documentation.
+- v1 support remains narrow and evidence-backed.
+- Do not claim generalized subsystem support.
+- Do not claim arbitrary schedule synthesis.
+- Do not claim full symbolic execution.
 
-## Research invariants
-- Preserve provenance.
-- Preserve reproducibility.
-- Prefer explainable, inspectable artifacts over clever implicit behavior.
+## Backend invariants
+
+- Mandatory bootstrap prefixes must remain preservable.
+- Producer→consumer resource chains must be representable explicitly.
+- Candidate-aware triage must remain tied to focus frames/files/free-use hints.
+- Every campaign must save artifacts for reproducibility.
+
+## Validation invariants
+
+- Narrow smoke checks come before end-to-end runs.
+- Validation evidence must be written to `plans/validation-report.md`.

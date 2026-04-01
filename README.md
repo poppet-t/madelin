@@ -1,23 +1,32 @@
 # madelin
 
-`madelin` is a monorepo for a bridge-guided Linux kernel fuzzing workflow:
+`madelin` is a monorepo for an artifact-driven Linux kernel fuzzing workflow that turns
+UAFX-discovered cross-entry UAF candidates into dynamic validation attempts:
 
 1. `uafx/` performs static cross-entry UAF analysis.
-2. `uaf-bridge/` converts static warnings into canonical seed artifacts.
-3. `mock/` imports those seeds and runs Healer-based seeded fuzzing.
+2. `uaf-bridge/` converts static warnings into canonical artifacts (`candidate.json`, `witness_plan.json`).
+3. `backend/syz-guided/` is the v1 syzkaller-based runtime backend: consumes bridge
+   artifacts, synthesizes seeds, orchestrates campaigns, and triages crashes against
+   the original candidate.
 
-The current practical target is seeded arm64 KVM fuzzing.
+The current practical target is Linux arm64 KVM.
 
-For AI/operator handoff, see [docs/ai/OPENCLAW-RUNBOOK.md](/Users/CJ/Desktop/Kernel-stuff/madelin/docs/ai/OPENCLAW-RUNBOOK.md).
+For AI/operator handoff, see [docs/ai/OPENCLAW-RUNBOOK.md](docs/ai/OPENCLAW-RUNBOOK.md).
 
 ## Current Verifier Scope
 
 The verifier stack is intentionally narrow today:
 
-- **Verdict layer**: current crash matching is KASAN/text-log driven and focused on candidate `loc0`/`loc1`, subsystem frames, and simple execution metadata.
-- **Runnable witness layer**: currently supports the narrow arm64 KVM subset `openat$KVM`, `KVM_CREATE_VM`, `KVM_CREATE_VCPU`, `KVM_ARM_VCPU_INIT`, `KVM_SET_ONE_REG`, `KVM_GET_ONE_REG`, and `KVM_RUN`.
-- **Harness layer**: currently supports one micro-harness family only, the arm64 KVM timer close-vs-run candidate shape (`kvm_timer_vcpu_terminate` vs `kvm_timer_should_fire` through `kvm_vcpu_ioctl`).
-- **Unsupported cases**: broader KVM device/IRQ templates, non-KVM candidates, broad subsystem expansion, and generalized semantic argument synthesis are still out of scope.
+- **Verdict layer**: current crash matching is KASAN/text-log driven and focused on
+  candidate `loc0`/`loc1`, subsystem frames, and simple execution metadata.
+- **Runnable witness layer**: currently supports the narrow arm64 KVM subset
+  `openat$KVM`, `KVM_CREATE_VM`, `KVM_CREATE_VCPU`, `KVM_ARM_VCPU_INIT`,
+  `KVM_SET_ONE_REG`, `KVM_GET_ONE_REG`, and `KVM_RUN`.
+- **Harness layer**: currently supports one micro-harness family only, the arm64 KVM
+  timer close-vs-run candidate shape (`kvm_timer_vcpu_terminate` vs
+  `kvm_timer_should_fire` through `kvm_vcpu_ioctl`).
+- **Unsupported cases**: broader KVM device/IRQ templates, non-KVM candidates, broad
+  subsystem expansion, and generalized semantic argument synthesis are still out of scope.
 
 ## Repository Layout
 
@@ -25,255 +34,173 @@ The verifier stack is intentionally narrow today:
   Static producer of cross-entry UAF candidates.
 - `uaf-bridge/`
   Canonical translator and witness generator:
-  `UAFX export -> candidate.json -> witness_plan.json -> mock_seed.json`
-- `mock/`
-  Dynamic consumer:
-  imports bridge seeds, prepares seeded corpus/relations/bias, validates startup assets, and launches seeded fuzzing.
+  `UAFX export → candidate.json → witness_plan.json`
+- `backend/syz-guided/`
+  v1 syzkaller-based runtime backend:
+  `candidate.json + witness_plan.json → state model → seeds → orchestrated campaign → candidate-aware triage`
+- `syzkaller/`
+  Upstream syzkaller source tree (clean checkout — build locally to produce binaries).
+- `syzkaller-runtime-export/`
+  Preserved arm64 KVM runtime environment for reproducible execution
+  (kernel image, disk image, SSH key, manager config).
 
 ## What Works Today
 
-The startup path is hardened for the practical seeded workflow:
+### v1 syzkaller backend (`backend/syz-guided/`)
 
-1. generate bridge seed
-2. prepare MOCK seed workdir
-3. validate prerequisites
-4. do a dry-run first
-5. launch a short seeded fuzzing run
+- State model generation is deterministic for the KVM fixture candidate.
+- Seed synthesis emits 4 prefix-preserving `.prog` seeds.
+- Bounded orchestrator with scoring, hot/cold queuing, and campaign lifecycle.
+- Candidate-aware triage emits structured `triage_report_v1.json` with verdict
+  classification.
+- Prefix-safe mutation preserves bootstrap prefix and sticky calls.
+- Relation guard validates resource chain integrity post-mutation.
+- 54 unit tests pass; 3 smoke scripts pass (seedgen, campaign, triage).
+
+What remains for full v1 readiness: real syzkaller integration against an arm64 KVM
+target, end-to-end campaign with live kernel execution, and repro wrapper validation.
 
 The intended operator flow is:
 
-```bash
-uafx -> uaf-bridge -> mock
+```
+uafx → uaf-bridge → backend/syz-guided
 ```
 
 ## Quick Start
 
+### Backend smoke (no KVM target required)
+
+```bash
+cd /path/to/madelin/backend/syz-guided
+bash scripts/smoke_seedgen.sh
+bash scripts/smoke_campaign.sh
+bash scripts/smoke_triage.sh
+```
+
+All three pass without a live kernel. These validate seed synthesis, the orchestrator
+lifecycle, and triage report emission against the KVM fixture.
+
+### Full arm64 KVM path
+
+Follow steps 1–5 below.
+
 ### 1. Set up `uaf-bridge`
 
 ```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/uaf-bridge
+cd uaf-bridge
 python3 -m venv .venv_ci
 source .venv_ci/bin/activate
 pip install -e .[dev]
 python scripts/check_env.py
 ```
 
-### 2. Build `mock`
+### 2. Build syzkaller
 
 ```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
-cargo build --release
+cd syzkaller
+make TARGETOS=linux TARGETARCH=arm64
+# Produces bin/linux_arm64/syz-manager, syz-executor, syz-execprog
+export SYZ_DIR="$PWD/bin"
 ```
 
-If the build fails while preparing syzkaller, install these tools first:
-
-```bash
-wget   # or curl
-sha384sum unzip patch make go
-```
-
-The patched syzkaller tree is expected at:
-
-```bash
-mock/target/release/syz-bin
-```
-
-If you are building on macOS and the release build does not produce `linux_arm64/syz-executor`, that is an environment limitation, not a silent success. For the arm64 KVM path you must either:
-
-- build the syzkaller tree on a Linux host, then point `SYZ_DIR` at that tree
-- or run the full arm64 KVM validation path on a Linux host directly
+If you are building on macOS, the `linux_arm64` targets require a Linux cross-build
+environment. For the arm64 KVM path either:
+- build on a Linux host, then point `SYZ_DIR` at that tree's `bin/`, or
+- run the full arm64 KVM validation path on a Linux host directly.
 
 ### 3. Generate bridge artifacts
 
 ```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/uaf-bridge
+cd uaf-bridge
 bash scripts/run_end_to_end_kvm_demo.sh
 ```
 
-This should produce:
-
+This produces:
 - `out/uafx_kvm_candidate.json`
 - `out/uafx_kvm_plan.json`
-- `out/uafx_kvm_mock_seed.json`
 - `out/uafx_kvm_proof/summary.json`
 
-### 4. Prepare seeded MOCK inputs
+### 4. Run the backend smoke against bridge artifacts
 
 ```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
-bash scripts/prepare_kvm_seed.sh
+cd backend/syz-guided
+bash scripts/smoke_seedgen.sh
+bash scripts/smoke_campaign.sh
+bash scripts/smoke_triage.sh
 ```
 
-This should produce:
+### 5. Start a full candidate run (requires arm64 KVM environment)
 
-- `seed_workdir/input/*.prog`
-- `seed_workdir/relations/bridge_seed.relations`
-- `seed_workdir/bias.json`
-
-### 5. Check startup prerequisites
-
-Set `SYZ_DIR` to the patched syzkaller tree:
+Provide `SYZ_DIR` and the runtime assets from `syzkaller-runtime-export/`:
 
 ```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
-export SYZ_DIR="$PWD/target/release/syz-bin"
+export SYZ_DIR=/path/to/built/syzkaller/bin
+bash backend/syz-guided/scripts/run_kvm_candidate.sh \
+  uaf-bridge/out/uafx_kvm_candidate.json
 ```
 
-Then validate the runtime assets:
+## Runtime Assets
 
-```bash
-bash scripts/check_kvm_fuzz_prereqs.sh <arm64_disk_image> <ssh_key> <arm64_kernel_image>
-```
+This repository bundles a preserved arm64 KVM runtime environment in
+`syzkaller-runtime-export/`:
 
-The checker validates:
+- `arm64-kvm-isolated.cfg` — syz-manager config used in the known working run
+- `Image` — arm64 kernel image (148 MB)
+- `arm64-isolated-overlay.qcow2` — root disk image (69 MB)
+- `id_rsa` / `id_rsa.pub` — SSH keypair
+- `SHA256SUMS.txt` — checksums for integrity verification
 
-- disk image path
-- SSH key path
-- kernel image path
-- seed input directory
-- seed relations file
-- bridge bias file
-- syzkaller layout
-- expected arm64 `syz-executor`
-
-It also reports whether the optional Django model manager is reachable.
-
-### 5b. Check witness / harness target prerequisites
-
-Witness and harness modes execute against a Linux target over SSH. Before trying those modes, run:
-
-```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
-export SYZ_DIR="$PWD/target/release/syz-bin"
-bash scripts/check_remote_target.sh \
-  --mode both \
-  --target-host <host> \
-  --ssh-key <ssh_key>
-```
-
-The checker verifies:
-
-- SSH connectivity
-- writable remote temp space
-- readable `dmesg` or a clear failure reason
-- remote `gcc` for harness mode
-- local `syz-executor` / `syz-execprog` availability for witness mode
-
-Current witness mode uploads `syz-executor` and `syz-execprog` from local `--syz-dir`; the target does not need those tools preinstalled on its PATH.
-
-### 6. Do a dry-run first
-
-```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
-export SYZ_DIR="$PWD/target/release/syz-bin"
-bash scripts/run_kvm_seed_fuzz.sh --dry-run <arm64_disk_image> <ssh_key> <arm64_kernel_image>
-```
-
-This validates the full seeded configuration and writes:
-
-```bash
-output-kvm-seeded/debug-summary.json
-```
-
-### 7. Start a short seeded fuzzing run
-
-```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
-export SYZ_DIR="$PWD/target/release/syz-bin"
-bash scripts/run_kvm_seed_fuzz.sh --max-seconds 600 <arm64_disk_image> <ssh_key> <arm64_kernel_image>
-```
-
-## Narrow Smoke Foundations
-
-Two conservative golden-path smoke scripts are available under the repo-root `scripts/` directory:
-
-```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin
-bash scripts/e2e_witness_smoke.sh
-bash scripts/e2e_harness_smoke.sh
-```
-
-They always do local artifact generation first. If a real target or required runtime assets are missing, they stop after preflight or artifact generation with an explicit note instead of trying to guess around the environment.
-
-## Runtime Assets You Must Provide
-
-This repository does not bundle the real arm64 runtime images. You still need:
-
-- an arm64 disk image
-- the SSH private key for that image
-- an arm64 kernel image
-
-Without those assets, the dry-run and prereq checker can validate paths and configuration, but real fuzzing cannot start.
+The environment targets an isolated QEMU/KVM mode with `syz-manager` attaching to a
+pre-booted VM at `root@127.0.0.1:10022`.
 
 ## Bridge Python Selection
 
-The bridge-side scripts now choose the first interpreter that actually passes `uaf-bridge/scripts/check_env.py`, in this order:
+The bridge-side scripts choose the first interpreter that passes
+`uaf-bridge/scripts/check_env.py`, in this order:
 
 1. `uaf-bridge/.venv_ci/bin/python`
 2. `uaf-bridge/.venv/bin/python`
 3. `uaf-bridge/.venv_sys/bin/python`
 4. `python3`
 
-If you want to pin a specific interpreter for the bridge demo or smoke scripts, export `PYTHON=/absolute/path/to/python` before running them.
-
-## Optional Model Manager
-
-The Django model manager is optional for:
-
-- bridge seed generation
-- seed preparation
-- prerequisite checking
-- seeded dry-run
-- short seeded startup
-
-If you want it running for longer fuzzing sessions:
-
-```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock/tools/model_manager
-python3 manage.py runserver
-```
+Export `PYTHON=/absolute/path/to/python` to pin a specific interpreter.
 
 ## Testing
+
+### `backend/syz-guided`
+
+```bash
+cd /path/to/madelin
+python3 backend/syz-guided/tests/test_state_model.py -v
+python3 backend/syz-guided/tests/test_seedgen.py -v
+python3 backend/syz-guided/tests/test_score.py -v
+python3 backend/syz-guided/tests/test_triage.py -v
+python3 backend/syz-guided/tests/test_relation_guard.py -v
+```
+
+Smoke scripts (no KVM target required):
+
+```bash
+cd backend/syz-guided
+bash scripts/smoke_seedgen.sh
+bash scripts/smoke_campaign.sh
+bash scripts/smoke_triage.sh
+```
 
 ### `uaf-bridge`
 
 ```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/uaf-bridge
+cd uaf-bridge
 .venv_ci/bin/python -m pytest
-```
-
-### `mock`
-
-```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
-bash -n scripts/prepare_kvm_seed.sh
-bash -n scripts/check_kvm_fuzz_prereqs.sh
-bash -n scripts/run_kvm_seed_fuzz.sh
-bash -n scripts/run_kvm_seeded_fuzz.sh
-bash -n scripts/run_seeded_vs_unseeded_compare.sh
-
-PYTHONPATH=. python3 -m unittest \
-  tests/test_startup_workflow.py \
-  tests/test_bridge_seed_import.py \
-  tests/test_corpus_histogram.py \
-  tests/test_corpus_prefix_metrics.py
-```
-
-Optional dry-run validation:
-
-```bash
-cd /Users/CJ/Desktop/Kernel-stuff/madelin/mock
-RUN_CARGO_DRY_RUN_TEST=1 PYTHONPATH=. python3 -m unittest tests/test_dry_run_summary.py
 ```
 
 ## More Detail
 
-For subsystem-specific operational detail:
-
-- `uaf-bridge/README.md`
-- `mock/README.md`
-- `PRD.md`
-- `context.md`
-- `docs/plans/docs/plans/v2-verifier-architecture.md`
-
-`docs/plans/v2-verifier-architecture.md` now exists as a compatibility pointer because some handoffs still refer to the shorter path, but the nested `docs/plans/docs/plans/...` copy is the current canonical plan location in this workspace.
+- `context/overview.md` — project purpose and v1 scope
+- `context/architecture.md` — pipeline stages and backend design principles
+- `context/current-status.md` — what is runnable today and what remains
+- `uaf-bridge/README.md` — bridge stage detail
+- `plans/current.md` — active implementation plan
+- `plans/validation-report.md` — recorded validation evidence
+- `plans/syzkaller-runtime-proof.md` — proof of which syzkaller path is used
+- `plans/mock-removal-audit.md` — MOCK reference audit and cleanup record

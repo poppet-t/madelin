@@ -22,3 +22,12 @@ mock/output-*/
 mock/seed_workdir*/
 mock/target/
 mock/tools/model_manager/db.sqlite3
+# Large runtime export artifacts
+syzkaller-runtime-export/Image
+syzkaller-runtime-export/*.qcow2
+syzkaller-runtime-export/*.img
+
+# Large runtime export artifacts
+syzkaller-runtime-export/Image
+syzkaller-runtime-export/*.qcow2
+syzkaller-runtime-export/*.img

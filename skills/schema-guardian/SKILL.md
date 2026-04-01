@@ -7,8 +7,10 @@ description: Check for producer-consumer contract drift around candidate and wit
 
 ## Use this when
 - any artifact field may change
+- adding, renaming, or reinterpreting fields
 - extraction, solver, emitter, or importer may alter schema expectations
 - ordering semantics encoded in artifacts may change
+- updating validators or typed consumers
 
 ## Read first
 - `AGENTS.md`
@@ -37,4 +39,5 @@ description: Check for producer-consumer contract drift around candidate and wit
 - do not approve silent producer-consumer mismatch
 - treat ordering semantics changes as schema-impacting unless proven otherwise
 - prefer explicit impact notes over implicit compatibility claims
+- if the requested task would create silent schema drift, stop and report that explicitly
 

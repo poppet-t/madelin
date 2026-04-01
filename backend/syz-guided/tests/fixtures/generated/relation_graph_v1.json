@@ -1,0 +1,163 @@
+{
+  "candidate_id": "cand_59fda0076e3243f2",
+  "edges": [
+    {
+      "from": "call:0:openat$KVM",
+      "resource": "fd_kvm",
+      "to": "res:fd_kvm",
+      "type": "resource_flow"
+    },
+    {
+      "from": "res:fd_kvm",
+      "resource": "fd_kvm",
+      "to": "call:1:ioctl$KVM_CREATE_VM",
+      "type": "resource_flow"
+    },
+    {
+      "from": "call:1:ioctl$KVM_CREATE_VM",
+      "resource": "fd_vm",
+      "to": "res:fd_vm",
+      "type": "resource_flow"
+    },
+    {
+      "from": "res:fd_vm",
+      "resource": "fd_vm",
+      "to": "call:2:ioctl$KVM_CREATE_VCPU",
+      "type": "resource_flow"
+    },
+    {
+      "from": "call:2:ioctl$KVM_CREATE_VCPU",
+      "resource": "fd_vcpu",
+      "to": "res:fd_vcpu",
+      "type": "resource_flow"
+    },
+    {
+      "from": "res:fd_vcpu",
+      "resource": "fd_vcpu",
+      "to": "call:3:ioctl$KVM_ARM_VCPU_INIT",
+      "type": "resource_flow"
+    },
+    {
+      "from": "res:fd_vcpu",
+      "resource": "fd_vcpu",
+      "to": "call:4:ioctl$KVM_SET_ONE_REG",
+      "type": "resource_flow"
+    },
+    {
+      "from": "res:fd_vcpu",
+      "resource": "fd_vcpu",
+      "to": "call:5:ioctl$KVM_GET_ONE_REG",
+      "type": "resource_flow"
+    },
+    {
+      "from": "res:fd_vcpu",
+      "resource": "fd_vcpu",
+      "to": "call:6:ioctl$KVM_RUN",
+      "type": "resource_flow"
+    },
+    {
+      "from": "event:escape",
+      "reason": "Pointer must escape before later fetch/use chain.",
+      "to": "event:fetch",
+      "type": "must_precede"
+    },
+    {
+      "from": "event:escape",
+      "reason": "VCPU timer context must be installed before it can be fetched from ioctl-side logic.",
+      "to": "event:fetch",
+      "type": "must_precede"
+    },
+    {
+      "from": "event:free",
+      "reason": "Cross-entry UAF requires timer teardown to occur before later timer use.",
+      "to": "event:use",
+      "type": "must_precede"
+    },
+    {
+      "from": "event:free",
+      "reason": "Use-after-free requires free to occur before use.",
+      "to": "event:use",
+      "type": "must_precede"
+    }
+  ],
+  "mutation_constraints": [
+    {
+      "description": "First 3 calls are immutable bootstrap prefix",
+      "rule": "immutable_prefix",
+      "scope": "calls[0:3]"
+    },
+    {
+      "description": "Mutations may only modify calls after the bootstrap prefix",
+      "rule": "suffix_only_mutation",
+      "scope": "calls[3:]"
+    },
+    {
+      "description": "Resource producer\u2192consumer flow must not be broken by mutation",
+      "rule": "preserve_resource_chain",
+      "scope": "all"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "res:fd_kvm",
+      "phase": "bootstrap",
+      "resource": "fd_kvm",
+      "type": "resource"
+    },
+    {
+      "id": "res:fd_vm",
+      "phase": "bootstrap",
+      "resource": "fd_vm",
+      "type": "resource"
+    },
+    {
+      "id": "res:fd_vcpu",
+      "phase": "bootstrap",
+      "resource": "fd_vcpu",
+      "type": "resource"
+    },
+    {
+      "call": "openat$KVM",
+      "id": "call:0:openat$KVM",
+      "phase": "bootstrap",
+      "type": "syscall"
+    },
+    {
+      "call": "ioctl$KVM_CREATE_VM",
+      "id": "call:1:ioctl$KVM_CREATE_VM",
+      "phase": "bootstrap",
+      "type": "syscall"
+    },
+    {
+      "call": "ioctl$KVM_CREATE_VCPU",
+      "id": "call:2:ioctl$KVM_CREATE_VCPU",
+      "phase": "bootstrap",
+      "type": "syscall"
+    },
+    {
+      "call": "ioctl$KVM_ARM_VCPU_INIT",
+      "id": "call:3:ioctl$KVM_ARM_VCPU_INIT",
+      "phase": "configure",
+      "type": "syscall"
+    },
+    {
+      "call": "ioctl$KVM_SET_ONE_REG",
+      "id": "call:4:ioctl$KVM_SET_ONE_REG",
+      "phase": "configure",
+      "type": "syscall"
+    },
+    {
+      "call": "ioctl$KVM_GET_ONE_REG",
+      "id": "call:5:ioctl$KVM_GET_ONE_REG",
+      "phase": "configure",
+      "type": "syscall"
+    },
+    {
+      "call": "ioctl$KVM_RUN",
+      "id": "call:6:ioctl$KVM_RUN",
+      "phase": "trigger",
+      "type": "syscall"
+    }
+  ],
+  "schema_version": "relation_graph/v1"
+}

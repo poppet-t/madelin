@@ -1,0 +1,58 @@
+{
+  "$id": "https://madelin.local/schemas/target_profile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Target Profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidate_id",
+    "schema_version",
+    "focus_frames",
+    "focus_files",
+    "free_use_hints",
+    "preferred_syscalls",
+    "candidate_signal_rules"
+  ],
+  "properties": {
+    "candidate_id": { "type": "string" },
+    "schema_version": { "const": "target_profile/v1", "type": "string" },
+    "focus_frames": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "focus_files": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "free_use_hints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "function", "file", "line"],
+        "properties": {
+          "role": { "enum": ["free", "use"] },
+          "function": { "type": ["string", "null"] },
+          "file": { "type": ["string", "null"] },
+          "line": { "type": ["integer", "null"] }
+        }
+      }
+    },
+    "preferred_syscalls": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "candidate_signal_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule", "description"],
+        "properties": {
+          "rule": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}
