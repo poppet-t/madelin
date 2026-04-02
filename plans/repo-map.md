@@ -17,15 +17,15 @@
 - backend/syz-guided/triage/ → parse_kasan.py, match_candidate.py, report.py
 - backend/syz-guided/repro/ → candidate_repro.py
 - backend/syz-guided/integration/ → syzkaller_runner.py
-- backend/syz-guided/scripts/ → smoke_seedgen.sh, smoke_campaign.sh, smoke_triage.sh, run_kvm_candidate.sh
+- backend/syz-guided/scripts/ → smoke_seedgen.sh, smoke_campaign.sh, smoke_triage.sh, smoke_vm_validator.sh, check_linux_kvm_host.sh, run_linux_kvm_one_shot.sh, run_linux_syz_manager.sh
 - backend/syz-guided/tests/ → fixtures/, test_*.py
 
 ## Syzkaller reference tree
 - syzkaller/ — clean upstream checkout of google/syzkaller (unmodified, no binaries)
 - syzkaller-runtime-export/ — preserved arm64 KVM runtime environment from working run
 
-## Disposable VM validator (designed, not yet implemented)
-- backend/syz-guided/vm_validator/ — one-shot QEMU TCG runner for Mac
+## VM validator (implemented, TCG-validated on macOS)
+- backend/syz-guided/vm_validator/ — one-shot QEMU arm64 runner
   - `__init__.py` — package marker
   - `preflight.py` — verify QEMU, kernel Image, disk image, syz-execprog, SSH key
   - `vm_runner.py` — boot QEMU TCG (aarch64, virt, cortex-a57), SSH wait, shutdown
@@ -38,8 +38,13 @@
   - produces (via existing triage/): triage_report_v1.json
   - triage integration: calls `triage.report.build_triage_report(crash_text, tp, sm, calls)`
   - does NOT use syz-manager or the syzkaller campaign loop
-- backend/syz-guided/scripts/smoke_vm_validator.sh — end-to-end smoke (NEW)
-- backend/syz-guided/tests/test_vm_validator.py — unit tests, no VM needed (NEW)
+- backend/syz-guided/scripts/smoke_vm_validator.sh — preflight-only or full boot smoke
+- backend/syz-guided/tests/test_vm_validator.py — 30 unit tests, no VM needed
+
+## Linux KVM helper scripts (implemented, not yet run on Linux)
+- backend/syz-guided/scripts/check_linux_kvm_host.sh — host readiness preflight
+- backend/syz-guided/scripts/run_linux_kvm_one_shot.sh — one-shot seed execution under QEMU/KVM
+- backend/syz-guided/scripts/run_linux_syz_manager.sh — bounded syz-manager campaign launcher
 
 ## Removed (legacy)
 - mock/ — removed; was the legacy Healer-based consumer
@@ -76,3 +81,5 @@ witness_plan.json (bridge)┘                        │
 - Seed parsing and prefix preservation
 - Bounded campaign smoke
 - Triage smoke
+- vm_validator one-shot (macOS TCG — DONE)
+- Linux KVM one-shot + syz-manager campaign (see `plans/linux-kvm-runbook.md`)

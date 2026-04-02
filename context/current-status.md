@@ -23,8 +23,8 @@
 - Candidate-aware triage emits structured reports with verdict classification.
 - Prefix-safe mutation preserves bootstrap prefix and sticky calls.
 - Relation guard validates resource chain integrity post-mutation.
-- 54 unit tests pass across all modules.
-- 3 smoke scripts pass (seedgen, campaign, triage).
+- 84 unit tests pass across all modules (including 30 vm_validator tests).
+- 4 smoke scripts pass (seedgen, campaign, triage, vm_validator).
 - syz-manager and syz-execprog build successfully from the in-repo syzkaller/ source tree
   (confirmed: `GOOS=linux GOARCH=arm64 go build ./syz-manager/` produces a valid 72M ELF).
 
@@ -39,14 +39,25 @@
 - KVM ioctls return EINVAL under TCG (no `/dev/kvm`) — expected, not a code issue.
 - Triage pipeline produces correct `insufficient_data` verdict when no crash occurs.
 
+## What is now true after Linux KVM preparation
+
+- `plans/linux-kvm-runbook.md` provides the concrete execution plan for Linux KVM hosts.
+- Three reusable Linux-side helper scripts exist (validated on macOS, ready for Linux):
+  - `check_linux_kvm_host.sh` — host readiness preflight (PASS/WARN/FAIL summary)
+  - `run_linux_kvm_one_shot.sh` — one-shot seed execution under QEMU/KVM
+  - `run_linux_syz_manager.sh` — bounded syz-manager campaign launcher with timeout
+- All three scripts fail honestly on macOS (report "not Linux" and exit nonzero).
+- `vm_validator/` module (5 Python files, 30 unit tests) is fully implemented.
+
 ## What remains for full v1 readiness
 
-- Real KVM-triggered KASAN crash requires `/dev/kvm` (Linux KVM host or nested virt):
-  - `/dev/kvm` device present
-  - `SYZ_DIR` set to the directory containing built binaries
-- End-to-end campaign with actual kernel execution (syz-manager loop).
-- Repro wrapper end-to-end validation.
+- Real KVM-triggered KASAN crash requires a Linux arm64 KVM host with `/dev/kvm`.
+- One-shot seed execution under QEMU/KVM (using `run_linux_kvm_one_shot.sh`).
+- Bounded syz-manager campaign (using `run_linux_syz_manager.sh`).
+- Candidate-aware triage on real crash output.
+- Repro wrapper end-to-end validation on real crash input.
 - Coverage signal integration from syzkaller.
+- See `plans/linux-kvm-runbook.md` for the full step-by-step guide.
 
 ## Migration status
 
