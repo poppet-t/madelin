@@ -1,0 +1,104 @@
+{
+  "analysis_context": {
+    "arch": "arm64",
+    "kernel_area": "net/netfilter",
+    "subsystem": "net",
+    "target_family": "arm64-vm-software"
+  },
+  "candidate_id": "cand_fixture_net_0001",
+  "constraints": {
+    "events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "min_threads": 2,
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Pointer must escape before later fetch/use chain."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Use-after-free requires free to occur before use."
+      }
+    ],
+    "predicates": [],
+    "same_object": null
+  },
+  "entries": [
+    {
+      "entry_func": "nfnetlink_rcv",
+      "entry_kind": "netlink_recv",
+      "grounded": true,
+      "heuristic": false,
+      "support_level": "grounded",
+      "supported": true,
+      "syscall_templates": [
+        {
+          "template_id": "netfilter_nft_batch:netlink_send:arm64-vm:v1",
+          "calls": [
+            "socket$nl_netfilter(0x10, 0x3, 0xc)",
+            "sendmsg$NFT_BATCH(fd_nl, &msg, 0x0)",
+            "recvmsg(fd_nl, &msg, 0x0)",
+            "close(fd_nl)"
+          ],
+          "required_resources": [
+            "fd_nl"
+          ],
+          "notes": "Fixture: netlink/netfilter batch send + receive + teardown."
+        }
+      ],
+      "unsupported_reasons": []
+    }
+  ],
+  "flow": "Con",
+  "loc0": {
+    "context": [
+      "nft_commit_release"
+    ],
+    "file": "net/netfilter/nf_tables_api.c",
+    "function": "nft_commit_release",
+    "line": 1111
+  },
+  "loc1": {
+    "context": [
+      "nfnetlink_rcv"
+    ],
+    "file": "net/netfilter/nfnetlink.c",
+    "function": "nfnetlink_rcv",
+    "line": 2222
+  },
+  "provenance": {
+    "normalizer": "backend-fixture",
+    "raw_warning_sha256_prefix": "0000000000000000",
+    "warning_id": "uafx-net-0001"
+  },
+  "raw_warning": {
+    "warning_id": "uafx-net-0001",
+    "note": "Synthetic fixture warning; used for backend dry-run validation only."
+  },
+  "schema_version": "candidate/v1",
+  "source": {
+    "raw_file": "tests/fixtures/packs/net/uafx_bridge_export.json",
+    "tool": "uafx-bridge-import",
+    "version": "0.1"
+  },
+  "status": {
+    "grounded_entries": [
+      "nfnetlink_rcv"
+    ],
+    "heuristic_entries": [],
+    "mapping_confidence": "fixture",
+    "ready_for_smt": true,
+    "supported": true,
+    "unsupported_entries": [],
+    "unsupported_reasons": []
+  }
+}
+

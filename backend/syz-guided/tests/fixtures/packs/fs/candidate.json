@@ -1,0 +1,107 @@
+{
+  "analysis_context": {
+    "arch": "arm64",
+    "kernel_area": "fs",
+    "subsystem": "fs",
+    "target_family": "arm64-vm-software"
+  },
+  "candidate_id": "cand_fixture_fs_0001",
+  "constraints": {
+    "events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "min_threads": 2,
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Pointer must escape before later fetch/use chain."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Use-after-free requires free to occur before use."
+      }
+    ],
+    "predicates": [],
+    "same_object": null
+  },
+  "entries": [
+    {
+      "entry_func": "do_mount",
+      "entry_kind": "mount_api_step",
+      "grounded": true,
+      "heuristic": false,
+      "support_level": "grounded",
+      "supported": true,
+      "syscall_templates": [
+        {
+          "template_id": "mount_api_lifecycle:mount_api_step:arm64-vm:v1",
+          "calls": [
+            "fsopen(&fs, 0x0)",
+            "fsconfig(fd_fs, 0x0, &key, &val, 0x0)",
+            "fsmount(fd_fs, 0x0, 0x0)",
+            "move_mount(fd_mnt, 0x0, AT_FDCWD, &dst, 0x0)",
+            "umount2(&dst, 0x0)",
+            "close(fd_fs)"
+          ],
+          "required_resources": [
+            "fd_fs",
+            "fd_mnt"
+          ],
+          "notes": "Fixture: fsopen/fsconfig/fsmount/move_mount/umount sequence."
+        }
+      ],
+      "unsupported_reasons": []
+    }
+  ],
+  "flow": "Con",
+  "loc0": {
+    "context": [
+      "mntput"
+    ],
+    "file": "fs/namespace.c",
+    "function": "mntput",
+    "line": 5555
+  },
+  "loc1": {
+    "context": [
+      "do_mount"
+    ],
+    "file": "fs/namespace.c",
+    "function": "do_mount",
+    "line": 6666
+  },
+  "provenance": {
+    "normalizer": "backend-fixture",
+    "raw_warning_sha256_prefix": "0000000000000000",
+    "warning_id": "uafx-fs-0001"
+  },
+  "raw_warning": {
+    "warning_id": "uafx-fs-0001",
+    "note": "Synthetic fixture warning; used for backend dry-run validation only."
+  },
+  "schema_version": "candidate/v1",
+  "source": {
+    "raw_file": "tests/fixtures/packs/fs/uafx_bridge_export.json",
+    "tool": "uafx-bridge-import",
+    "version": "0.1"
+  },
+  "status": {
+    "grounded_entries": [
+      "do_mount"
+    ],
+    "heuristic_entries": [],
+    "mapping_confidence": "fixture",
+    "ready_for_smt": true,
+    "supported": true,
+    "unsupported_entries": [],
+    "unsupported_reasons": []
+  }
+}
+

@@ -1,0 +1,75 @@
+{
+  "barriers": [
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "Use-after-free requires free to occur before use."
+    }
+  ],
+  "candidate_id": "cand_fixture_net_0001",
+  "debug": {
+    "check_result": "sat",
+    "encoded_event_count": 6,
+    "encoded_events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "input_mapping_confidence": "fixture",
+    "soft_constraints": [],
+    "solver": "z3.Optimize",
+    "solver_model_available": true
+  },
+  "execution_hints": {
+    "entry_selection": {
+      "entry_func": "nfnetlink_rcv",
+      "entry_kind": "netlink_recv",
+      "template_id": "netfilter_nft_batch:netlink_send:arm64-vm:v1"
+    },
+    "notes": [
+      "Fixture plan: uses the single netlink/netfilter syscall template."
+    ]
+  },
+  "ordered_steps": [
+    {
+      "event": "free",
+      "step_index": 0,
+      "timestamp": 0
+    },
+    {
+      "event": "use",
+      "step_index": 1,
+      "timestamp": 1
+    }
+  ],
+  "predicates": [],
+  "sat": true,
+  "schema_version": "witness_plan/v1",
+  "status": "sat",
+  "threads": [
+    {
+      "steps": [
+        {
+          "event": "free",
+          "step_index": 0,
+          "timestamp": 0
+        }
+      ],
+      "thread_id": 0
+    },
+    {
+      "steps": [
+        {
+          "event": "use",
+          "step_index": 1,
+          "timestamp": 1
+        }
+      ],
+      "thread_id": 1
+    }
+  ]
+}
+

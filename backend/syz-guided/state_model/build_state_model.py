@@ -23,7 +23,7 @@ import sys
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# KVM arm64 resource chain (v1 hard-coded for the supported slice)
+# Resource chains (v1)
 # ---------------------------------------------------------------------------
 
 _KVM_RESOURCE_CHAIN = [
@@ -87,35 +87,76 @@ def _loc_to_slim(loc: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Phase classification
+# Template selection + call extraction
 # ---------------------------------------------------------------------------
 
-def _classify_phases(candidate: dict) -> dict:
-    """Classify template calls into bootstrap / configure / trigger phases.
+def _canon_call(call: str) -> str:
+    return call.split("(", 1)[0].strip()
 
-    For the narrow KVM arm64 slice the classification is deterministic:
-      bootstrap = resource-producing calls (openat, CREATE_VM, CREATE_VCPU)
-      configure = init/config calls (VCPU_INIT, SET_ONE_REG, GET_ONE_REG)
-      trigger   = execution calls (KVM_RUN) + close
+
+def _select_representative_template_calls(candidate: dict, witness_plan: dict) -> list[str]:
+    """Select one grounded syscall template and return its raw call strings.
+
+    Prefer the plan's selected (entry_func, template_id); fall back to the first grounded
+    template, then to empty list.
     """
-    # Collect all template calls across grounded entries.
-    all_calls: list[str] = []
+    sel = (
+        witness_plan.get("execution_hints", {})
+        .get("entry_selection", {})
+        if isinstance(witness_plan.get("execution_hints"), dict)
+        else {}
+    )
+    entry_func = sel.get("entry_func") if isinstance(sel, dict) else None
+    template_id = sel.get("template_id") if isinstance(sel, dict) else None
+
+    # Fast path: find the selected template.
+    if isinstance(entry_func, str) and isinstance(template_id, str):
+        for entry in candidate.get("entries", []):
+            if entry.get("support_level") != "grounded":
+                continue
+            if entry.get("entry_func") != entry_func:
+                continue
+            for tmpl in entry.get("syscall_templates", []):
+                if tmpl.get("template_id") == template_id:
+                    calls = tmpl.get("calls", [])
+                    return [str(c) for c in calls if isinstance(c, str)]
+
+    # Fallback: first grounded template.
     for entry in candidate.get("entries", []):
         if entry.get("support_level") != "grounded":
             continue
         for tmpl in entry.get("syscall_templates", []):
-            all_calls.extend(tmpl.get("calls", []))
+            calls = tmpl.get("calls", [])
+            if isinstance(calls, list) and calls:
+                return [str(c) for c in calls if isinstance(c, str)]
 
-    # De-duplicate while preserving order.
+    return []
+
+
+def _collect_unique_calls(candidate: dict, witness_plan: dict) -> list[str]:
+    """Collect canonical call names, preserving order, from the representative template.
+
+    This intentionally scopes the backend's model to what the bridge selected, rather than
+    merging multiple candidate entries.
+    """
+    raw_calls = _select_representative_template_calls(candidate, witness_plan)
     seen: set[str] = set()
-    unique_calls: list[str] = []
-    for c in all_calls:
-        canon = c.split("(")[0].strip()
-        if canon not in seen:
-            seen.add(canon)
-            unique_calls.append(canon)
+    unique: list[str] = []
+    for c in raw_calls:
+        canon = _canon_call(c)
+        if canon in seen:
+            continue
+        seen.add(canon)
+        unique.append(canon)
+    return unique
 
-    # Classify by known KVM arm64 patterns.
+
+# ---------------------------------------------------------------------------
+# Phase classification
+# ---------------------------------------------------------------------------
+
+def _classify_phases_kvm(unique_calls: list[str]) -> dict:
+    """KVM arm64 slice phase classification (kept stable for v1)."""
     bootstrap_kw = {"openat$KVM", "ioctl$KVM_CREATE_VM", "ioctl$KVM_CREATE_VCPU"}
     configure_kw = {"ioctl$KVM_ARM_VCPU_INIT", "ioctl$KVM_SET_ONE_REG", "ioctl$KVM_GET_ONE_REG"}
     trigger_kw = {"ioctl$KVM_RUN", "close$KVM", "close"}
@@ -124,7 +165,6 @@ def _classify_phases(candidate: dict) -> dict:
     configure = [c for c in unique_calls if c in configure_kw]
     trigger = [c for c in unique_calls if c in trigger_kw]
 
-    # Any remaining unclassified calls go into trigger as suffix candidates.
     classified = bootstrap_kw | configure_kw | trigger_kw
     for c in unique_calls:
         if c not in classified:
@@ -143,6 +183,59 @@ def _classify_phases(candidate: dict) -> dict:
             "calls": trigger,
             "description": "Execution and teardown calls that may trigger free/use",
         },
+    }
+
+
+def _classify_phases_generic(subsystem: str, unique_calls: list[str]) -> dict:
+    """Best-effort phase classification for non-KVM packs.
+
+    The backend relies on phases for prefix preservation and scoring, not for full semantic modeling.
+    """
+    bootstrap: list[str] = []
+    configure: list[str] = []
+    trigger: list[str] = []
+
+    # Pack-specific anchors (additive; conservative).
+    bootstrap_kw: set[str] = set()
+    configure_kw: set[str] = set()
+    trigger_kw: set[str] = {"close", "umount2"}  # common teardown triggers
+
+    if subsystem == "io_uring":
+        bootstrap_kw |= {"io_uring_setup"}
+        configure_kw |= {"io_uring_register"}
+        trigger_kw |= {"io_uring_enter"}
+    elif subsystem == "net":
+        bootstrap_kw |= {"socket$nl_netfilter", "socket$nl_generic", "socket$nl_route"}
+        trigger_kw |= {"sendmsg$NFT_BATCH", "sendmsg$NETLINK", "sendmsg", "recvmsg"}
+    elif subsystem == "bpf":
+        bootstrap_kw |= {"bpf$MAP_CREATE", "bpf$PROG_LOAD"}
+        configure_kw |= {"bpf$PROG_ATTACH", "bpf$BPF_LINK_CREATE"}
+        trigger_kw |= {"bpf$MAP_UPDATE_ELEM", "bpf$MAP_LOOKUP_ELEM", "bpf$PROG_DETACH"}
+    elif subsystem == "fs":
+        bootstrap_kw |= {"fsopen", "fsmount", "openat$FUSE"}
+        configure_kw |= {"fsconfig"}
+        trigger_kw |= {"move_mount", "open_tree", "mount_setattr"}
+
+    for c in unique_calls:
+        if c in bootstrap_kw:
+            bootstrap.append(c)
+        elif c in configure_kw:
+            configure.append(c)
+        elif c in trigger_kw:
+            trigger.append(c)
+        else:
+            # Default: anything after bootstrap/configure is a trigger candidate.
+            trigger.append(c)
+
+    # Ensure a non-empty bootstrap if we have any calls at all.
+    if not bootstrap and unique_calls:
+        bootstrap = [unique_calls[0]]
+        trigger = [c for c in unique_calls[1:]]
+
+    return {
+        "bootstrap": {"calls": bootstrap, "description": f"{subsystem}: resource/bootstrap prefix"},
+        "configure": {"calls": configure, "description": f"{subsystem}: configuration/register steps"},
+        "trigger": {"calls": trigger, "description": f"{subsystem}: trigger/teardown steps"},
     }
 
 
@@ -171,6 +264,73 @@ def _compute_favored_suffix(candidate: dict) -> list[str]:
     return favored
 
 
+def _compute_favored_suffix_generic(subsystem: str, phases: dict) -> list[str]:
+    favored: list[str] = []
+    trigger_calls = phases.get("trigger", {}).get("calls", [])
+    if isinstance(trigger_calls, list):
+        # Favor the first trigger call and any obvious teardown.
+        for c in trigger_calls:
+            if c in ("close", "umount2"):
+                favored.append(c)
+        if trigger_calls:
+            favored.insert(0, str(trigger_calls[0]))
+
+    # Pack-specific additions.
+    if subsystem == "io_uring" and "io_uring_enter" not in favored:
+        favored.append("io_uring_enter")
+    if subsystem == "net":
+        for c in ("sendmsg$NFT_BATCH", "recvmsg"):
+            if c not in favored:
+                favored.append(c)
+    if subsystem == "bpf":
+        for c in ("bpf$MAP_UPDATE_ELEM", "bpf$PROG_ATTACH"):
+            if c not in favored:
+                favored.append(c)
+    if subsystem == "fs":
+        for c in ("move_mount", "umount2"):
+            if c not in favored:
+                favored.append(c)
+    return list(dict.fromkeys(favored))
+
+
+def _resource_chain_for_pack(subsystem: str, unique_calls: list[str]) -> list[dict[str, Any]]:
+    """Best-effort resource chain for scoring/mutation guards (non-semantic)."""
+    call_set = set(unique_calls)
+    chain: list[dict[str, Any]] = []
+
+    def _add(resource: str, producer: str, consumers: list[str]) -> None:
+        if producer not in call_set:
+            return
+        chain.append(
+            {
+                "resource": resource,
+                "type": "fd",
+                "producer_call": producer,
+                "consumer_calls": [c for c in consumers if c in call_set],
+            }
+        )
+
+    if subsystem == "io_uring":
+        _add("fd_ring", "io_uring_setup", ["io_uring_register", "io_uring_enter", "close"])
+    elif subsystem == "net":
+        # Netlink socket fd.
+        for sock in ("socket$nl_netfilter", "socket$nl_generic", "socket$nl_route", "socket"):
+            if sock in call_set:
+                _add("fd_nl", sock, ["sendmsg$NFT_BATCH", "sendmsg$NETLINK", "sendmsg", "recvmsg", "close"])
+                break
+    elif subsystem == "bpf":
+        _add("fd_map", "bpf$MAP_CREATE", ["bpf$MAP_UPDATE_ELEM", "bpf$MAP_LOOKUP_ELEM", "close"])
+        _add("fd_prog", "bpf$PROG_LOAD", ["bpf$PROG_ATTACH", "bpf$BPF_LINK_CREATE", "close"])
+        _add("fd_link", "bpf$BPF_LINK_CREATE", ["close"])
+    elif subsystem == "fs":
+        _add("fd_fs", "fsopen", ["fsconfig", "close"])
+        _add("fd_mnt", "fsmount", ["move_mount", "umount2", "close"])
+        _add("fd_fuse", "openat$FUSE", ["mount", "close"])
+
+    # Fallback: empty chain is allowed by schema.
+    return chain
+
+
 # ---------------------------------------------------------------------------
 # State model builder
 # ---------------------------------------------------------------------------
@@ -183,13 +343,24 @@ def build_state_model(
 ) -> dict:
     """Produce state_model_v1.json from bridge artifacts."""
     ctx = candidate.get("analysis_context", {})
-    phases = _classify_phases(candidate)
+    subsystem = ctx.get("subsystem", "unknown")
+    unique_calls = _collect_unique_calls(candidate, witness_plan)
+
+    if subsystem == "kvm":
+        phases = _classify_phases_kvm(unique_calls)
+        resource_chain = list(_KVM_RESOURCE_CHAIN)
+        favored = _compute_favored_suffix(candidate)
+    else:
+        phases = _classify_phases_generic(str(subsystem), unique_calls)
+        resource_chain = _resource_chain_for_pack(str(subsystem), unique_calls)
+        favored = _compute_favored_suffix_generic(str(subsystem), phases)
+
     sticky, prefix_len = _compute_sticky_and_prefix(phases)
 
     return {
         "candidate_id": candidate["candidate_id"],
         "schema_version": "state_model/v1",
-        "subsystem": ctx.get("subsystem", "unknown"),
+        "subsystem": subsystem,
         "arch": ctx.get("arch", "unknown"),
         "target_family": ctx.get("target_family", "unknown"),
         "source_artifacts": {
@@ -198,12 +369,12 @@ def build_state_model(
         },
         "loc0": _loc_to_slim(candidate.get("loc0", {})),
         "loc1": _loc_to_slim(candidate.get("loc1", {})),
-        "resource_chain": _KVM_RESOURCE_CHAIN,
+        "resource_chain": resource_chain,
         "phases": phases,
         "precedence_edges": witness_plan.get("barriers", []),
         "sticky_calls": sticky,
         "immutable_prefix_len": prefix_len,
-        "favored_suffix_calls": _compute_favored_suffix(candidate),
+        "favored_suffix_calls": favored,
         "score_weights": dict(_DEFAULT_SCORE_WEIGHTS),
     }
 

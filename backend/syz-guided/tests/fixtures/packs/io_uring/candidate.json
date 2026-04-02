@@ -1,0 +1,104 @@
+{
+  "analysis_context": {
+    "arch": "arm64",
+    "kernel_area": "fs/io_uring",
+    "subsystem": "io_uring",
+    "target_family": "arm64-vm-software"
+  },
+  "candidate_id": "cand_fixture_io_uring_0001",
+  "constraints": {
+    "events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "min_threads": 2,
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Pointer must escape before later fetch/use chain."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Use-after-free requires free to occur before use."
+      }
+    ],
+    "predicates": [],
+    "same_object": null
+  },
+  "entries": [
+    {
+      "entry_func": "io_uring_enter",
+      "entry_kind": "io_uring_enter",
+      "grounded": true,
+      "heuristic": false,
+      "support_level": "grounded",
+      "supported": true,
+      "syscall_templates": [
+        {
+          "template_id": "io_uring_ring_lifecycle:io_uring_enter:arm64-vm:v1",
+          "calls": [
+            "io_uring_setup(0x8, &params)",
+            "io_uring_register(fd_ring, 0x0, &arg, 0x0)",
+            "io_uring_enter(fd_ring, 0x1, 0x0, 0x0, 0x0, 0x0)",
+            "close(fd_ring)"
+          ],
+          "required_resources": [
+            "fd_ring"
+          ],
+          "notes": "Fixture: minimal io_uring ring setup/register/enter/teardown flow."
+        }
+      ],
+      "unsupported_reasons": []
+    }
+  ],
+  "flow": "Con",
+  "loc0": {
+    "context": [
+      "io_uring_release"
+    ],
+    "file": "fs/io_uring.c",
+    "function": "io_uring_release",
+    "line": 1234
+  },
+  "loc1": {
+    "context": [
+      "io_uring_enter"
+    ],
+    "file": "fs/io_uring.c",
+    "function": "io_uring_enter",
+    "line": 2345
+  },
+  "provenance": {
+    "normalizer": "backend-fixture",
+    "raw_warning_sha256_prefix": "0000000000000000",
+    "warning_id": "uafx-io_uring-0001"
+  },
+  "raw_warning": {
+    "warning_id": "uafx-io_uring-0001",
+    "note": "Synthetic fixture warning; used for backend dry-run validation only."
+  },
+  "schema_version": "candidate/v1",
+  "source": {
+    "raw_file": "tests/fixtures/packs/io_uring/uafx_bridge_export.json",
+    "tool": "uafx-bridge-import",
+    "version": "0.1"
+  },
+  "status": {
+    "grounded_entries": [
+      "io_uring_enter"
+    ],
+    "heuristic_entries": [],
+    "mapping_confidence": "fixture",
+    "ready_for_smt": true,
+    "supported": true,
+    "unsupported_entries": [],
+    "unsupported_reasons": []
+  }
+}
+

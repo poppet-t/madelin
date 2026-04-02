@@ -1,0 +1,105 @@
+{
+  "analysis_context": {
+    "arch": "arm64",
+    "kernel_area": "kernel/bpf",
+    "subsystem": "bpf",
+    "target_family": "arm64-vm-software"
+  },
+  "candidate_id": "cand_fixture_bpf_0001",
+  "constraints": {
+    "events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "min_threads": 2,
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Pointer must escape before later fetch/use chain."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Use-after-free requires free to occur before use."
+      }
+    ],
+    "predicates": [],
+    "same_object": null
+  },
+  "entries": [
+    {
+      "entry_func": "sys_bpf",
+      "entry_kind": "bpf_cmd",
+      "grounded": true,
+      "heuristic": false,
+      "support_level": "grounded",
+      "supported": true,
+      "syscall_templates": [
+        {
+          "template_id": "bpf_map_prog_lifecycle:bpf_cmd:arm64-vm:v1",
+          "calls": [
+            "bpf$MAP_CREATE(0x0, &attr)",
+            "bpf$PROG_LOAD(0x0, &attr)",
+            "bpf$MAP_UPDATE_ELEM(0x0, &attr)",
+            "bpf$MAP_LOOKUP_ELEM(0x0, &attr)",
+            "close(fd_map)"
+          ],
+          "required_resources": [
+            "fd_map"
+          ],
+          "notes": "Fixture: minimal BPF map/program lifecycle with map update/lookup and teardown."
+        }
+      ],
+      "unsupported_reasons": []
+    }
+  ],
+  "flow": "Con",
+  "loc0": {
+    "context": [
+      "bpf_map_free"
+    ],
+    "file": "kernel/bpf/syscall.c",
+    "function": "bpf_map_free",
+    "line": 3333
+  },
+  "loc1": {
+    "context": [
+      "sys_bpf"
+    ],
+    "file": "kernel/bpf/syscall.c",
+    "function": "sys_bpf",
+    "line": 4444
+  },
+  "provenance": {
+    "normalizer": "backend-fixture",
+    "raw_warning_sha256_prefix": "0000000000000000",
+    "warning_id": "uafx-bpf-0001"
+  },
+  "raw_warning": {
+    "warning_id": "uafx-bpf-0001",
+    "note": "Synthetic fixture warning; used for backend dry-run validation only."
+  },
+  "schema_version": "candidate/v1",
+  "source": {
+    "raw_file": "tests/fixtures/packs/bpf/uafx_bridge_export.json",
+    "tool": "uafx-bridge-import",
+    "version": "0.1"
+  },
+  "status": {
+    "grounded_entries": [
+      "sys_bpf"
+    ],
+    "heuristic_entries": [],
+    "mapping_confidence": "fixture",
+    "ready_for_smt": true,
+    "supported": true,
+    "unsupported_entries": [],
+    "unsupported_reasons": []
+  }
+}
+
