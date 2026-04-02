@@ -55,10 +55,21 @@ The verifier stack is intentionally narrow today:
   classification.
 - Prefix-safe mutation preserves bootstrap prefix and sticky calls.
 - Relation guard validates resource chain integrity post-mutation.
-- 54 unit tests pass; 3 smoke scripts pass (seedgen, campaign, triage).
+- 84 unit tests pass; 4 smoke scripts pass (seedgen, campaign, triage, vm_validator).
 
-What remains for full v1 readiness: real syzkaller integration against an arm64 KVM
-target, end-to-end campaign with live kernel execution, and repro wrapper validation.
+### macOS QEMU TCG validation (`vm_validator/`)
+
+- One-shot execution proven on macOS under QEMU TCG (software emulation).
+- Full pipeline exercised: seed → syz-execprog → syz-executor → syscalls → dmesg → triage.
+- KVM ioctls return EINVAL under TCG (no `/dev/kvm`) — expected, not a code issue.
+- Triage correctly produces `insufficient_data` verdict when no crash occurs.
+
+### What remains
+
+- Real KVM-backed candidate trigger (requires Linux arm64 KVM host).
+- Bounded syz-manager campaign with coverage signal.
+- Repro wrapper validation on real crash input.
+- See `plans/linux-kvm-runbook.md` for the concrete execution plan.
 
 The intended operator flow is:
 
@@ -129,15 +140,40 @@ bash scripts/smoke_campaign.sh
 bash scripts/smoke_triage.sh
 ```
 
-### 5. Start a full candidate run (requires arm64 KVM environment)
+### 5. Live validation (requires arm64 KVM environment)
 
-Provide `SYZ_DIR` and the runtime assets from `syzkaller-runtime-export/`:
-
+**On macOS (TCG, no KVM)** — one-shot seed execution:
 ```bash
-export SYZ_DIR=/path/to/built/syzkaller/bin
-bash backend/syz-guided/scripts/run_kvm_candidate.sh \
-  uaf-bridge/out/uafx_kvm_candidate.json
+cd backend/syz-guided
+bash scripts/smoke_vm_validator.sh
 ```
+
+**On Linux KVM host** — check host readiness, then one-shot or full campaign:
+```bash
+# Preflight
+bash backend/syz-guided/scripts/check_linux_kvm_host.sh \
+  --kernel syzkaller-runtime-export/Image \
+  --disk syzkaller-runtime-export/arm64-standalone.qcow2 \
+  --ssh-key syzkaller-runtime-export/id_rsa
+
+# One-shot seed execution
+bash backend/syz-guided/scripts/run_linux_kvm_one_shot.sh \
+  --kernel syzkaller-runtime-export/Image \
+  --disk syzkaller-runtime-export/arm64-standalone.qcow2 \
+  --ssh-key syzkaller-runtime-export/id_rsa \
+  --syz-execprog syzkaller/bin/linux_arm64/syz-execprog \
+  --syz-executor syzkaller/bin/linux_arm64/syz-executor \
+  --prog backend/syz-guided/tests/fixtures/generated/seeds/seed_full_run.prog \
+  --out-dir /tmp/kvm_run
+
+# Bounded syz-manager campaign
+bash backend/syz-guided/scripts/run_linux_syz_manager.sh \
+  --config /tmp/kvm_run/syz-manager.cfg \
+  --out-dir /tmp/kvm_campaign \
+  --timeout 600
+```
+
+See `plans/linux-kvm-runbook.md` for the full step-by-step guide.
 
 ## Runtime Assets
 
@@ -145,13 +181,15 @@ This repository bundles a preserved arm64 KVM runtime environment in
 `syzkaller-runtime-export/`:
 
 - `arm64-kvm-isolated.cfg` — syz-manager config used in the known working run
-- `Image` — arm64 kernel image (148 MB)
-- `arm64-isolated-overlay.qcow2` — root disk image (69 MB)
+- `Image` — arm64 kernel image (148 MB, `7.0.0-rc5-gbbeb83d3182a`)
+- `arm64-standalone.qcow2` — bootable root disk image (11.5 GiB virtual, ext4, fixed fstab)
+- `arm64-isolated-overlay.qcow2` — legacy overlay (69 MB, requires missing base — do not use)
 - `id_rsa` / `id_rsa.pub` — SSH keypair
 - `SHA256SUMS.txt` — checksums for integrity verification
 
 The environment targets an isolated QEMU/KVM mode with `syz-manager` attaching to a
-pre-booted VM at `root@127.0.0.1:10022`.
+pre-booted VM at `root@127.0.0.1:10022`. The `arm64-standalone.qcow2` is the
+canonical bootable image; the overlay is kept only as a historical reference.
 
 ## Bridge Python Selection
 
@@ -176,6 +214,7 @@ python3 backend/syz-guided/tests/test_seedgen.py -v
 python3 backend/syz-guided/tests/test_score.py -v
 python3 backend/syz-guided/tests/test_triage.py -v
 python3 backend/syz-guided/tests/test_relation_guard.py -v
+python3 backend/syz-guided/tests/test_vm_validator.py -v
 ```
 
 Smoke scripts (no KVM target required):
@@ -204,3 +243,4 @@ cd uaf-bridge
 - `plans/validation-report.md` — recorded validation evidence
 - `plans/syzkaller-runtime-proof.md` — proof of which syzkaller path is used
 - `plans/mock-removal-audit.md` — MOCK reference audit and cleanup record
+- `plans/linux-kvm-runbook.md` — concrete Linux KVM host execution guide

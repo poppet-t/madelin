@@ -20,6 +20,13 @@
   (`openat$kvm`, lowercase) while state model stores internal names (`openat$KVM`,
   uppercase). Relation guard operates on internal names. Not a bug, but a boundary
   that needs attention if a prog-parser integration is added.
+- **Linux KVM helper scripts untested on Linux**: `check_linux_kvm_host.sh`,
+  `run_linux_kvm_one_shot.sh`, and `run_linux_syz_manager.sh` are validated for
+  syntax and macOS-side honest failure only. They have not been executed on a real
+  Linux KVM host yet.
+- **vm_runner.py hardcodes `-accel tcg`**: The Python `vm_validator/vm_runner.py`
+  module uses TCG acceleration. A ~10-line change to accept an `accel` parameter
+  is needed to reuse it for KVM. The shell scripts handle this directly.
 - `scripts/e2e_witness_smoke.sh` and `scripts/e2e_harness_smoke.sh` contain dead
   `MOCK_ROOT` variable references; cosmetic issue, scripts stop before reaching those
   branches.

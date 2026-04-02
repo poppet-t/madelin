@@ -32,14 +32,24 @@ python3 orchestrator/campaign.py \
     --max-iterations 10
 ```
 
-## Smoke tests
+## Smoke tests (any platform)
 
 ```bash
 bash scripts/smoke_seedgen.sh
 bash scripts/smoke_campaign.sh
 bash scripts/smoke_triage.sh
-bash scripts/smoke_vm_validator.sh   # preflight-only or full boot
+bash scripts/smoke_vm_validator.sh   # preflight-only or full TCG boot (macOS/Linux)
 ```
+
+## Linux KVM scripts (Linux only — fail honestly on macOS)
+
+```bash
+bash scripts/check_linux_kvm_host.sh --kernel ... --disk ... --ssh-key ...
+bash scripts/run_linux_kvm_one_shot.sh --kernel ... --disk ... --ssh-key ... --syz-execprog ... --syz-executor ... --prog ... --out-dir ...
+bash scripts/run_linux_syz_manager.sh --config ... --out-dir ... [--timeout 600]
+```
+
+See `plans/linux-kvm-runbook.md` for the full execution guide.
 
 ## Unit tests
 
@@ -63,9 +73,9 @@ mutator/           Prefix-safe mutation
 triage/            KASAN parsing, candidate matching, reports
 repro/             Candidate-preserving repro wrapper
 integration/       Syzkaller runner interface
-vm_validator/      One-shot QEMU TCG arm64 validation (macOS)
-scripts/           Smoke tests
-tests/             Unit tests + fixtures
+vm_validator/      One-shot QEMU TCG arm64 validation (macOS, validated)
+scripts/           Smoke tests + Linux KVM helper scripts
+tests/             Unit tests + fixtures (84 tests total)
 ```
 
 ## Artifacts produced

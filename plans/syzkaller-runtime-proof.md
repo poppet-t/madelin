@@ -116,9 +116,10 @@ bash backend/syz-guided/scripts/smoke_seedgen.sh
 bash backend/syz-guided/scripts/smoke_campaign.sh
 bash backend/syz-guided/scripts/smoke_triage.sh
 
-# Full run (requires KVM environment)
-export SYZ_DIR=/path/to/built/syzkaller/bin
-bash backend/syz-guided/scripts/run_kvm_candidate.sh <candidate_dir>
+# Linux KVM one-shot (requires Linux KVM host)
+bash backend/syz-guided/scripts/run_linux_kvm_one_shot.sh \
+  --kernel ... --disk ... --ssh-key ... \
+  --syz-execprog ... --syz-executor ... --prog ... --out-dir ...
 ```
 
 ---

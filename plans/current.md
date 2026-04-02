@@ -142,12 +142,16 @@ no long campaign, no mutation. One-shot: boot → inject → run → capture →
 
 ### What remains for full syz-manager campaign
 
-Required on a Linux arm64 KVM host (or after vm_validator proves the baseline):
+See `plans/linux-kvm-runbook.md` for the concrete execution plan.
 
-1. Build syz-executor via CGO cross-compiler.
-2. Provide standalone disk image compatible with syz-manager QEMU mode.
-3. Set `SYZ_DIR`, run bounded campaign, triage results.
-4. Update validation-report.md.
+Required on a Linux arm64 KVM host:
+
+1. Verify `/dev/kvm` on host and in guest.
+2. Build syzkaller natively (syz-manager, syz-execprog, syz-executor via CGO).
+3. One-shot seed execution under QEMU/KVM (section 5 of runbook).
+4. Bounded syz-manager campaign in isolated mode (section 6 of runbook).
+5. Triage any crashes via candidate-aware pipeline.
+6. Update validation-report.md with evidence.
 
 ## Done criteria (met for software validation)
 
