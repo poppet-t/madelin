@@ -63,24 +63,24 @@ case "$PACK" in
     FREE_FRAME="kvm_timer_vcpu_terminate"
     ;;
   io_uring)
-    CRASH_FRAME="io_uring_enter"
-    CRASH_FILE="fs/io_uring.c"
-    FREE_FRAME="io_uring_release"
+    CRASH_FRAME="__io_submit_flush_completions"
+    CRASH_FILE="io_uring/io_uring.c"
+    FREE_FRAME="io_ring_ctx_free"
     ;;
   net)
-    CRASH_FRAME="nfnetlink_rcv"
-    CRASH_FILE="net/netfilter/nfnetlink.c"
-    FREE_FRAME="nft_commit_release"
+    CRASH_FRAME="nf_tables_dump_set"
+    CRASH_FILE="net/netfilter/nf_tables_api.c"
+    FREE_FRAME="nf_tables_destroy_set"
     ;;
   bpf)
-    CRASH_FRAME="sys_bpf"
+    CRASH_FRAME="bpf_map_lookup_elem"
     CRASH_FILE="kernel/bpf/syscall.c"
-    FREE_FRAME="bpf_map_free"
+    FREE_FRAME="bpf_link_free"
     ;;
   fs)
-    CRASH_FRAME="do_mount"
+    CRASH_FRAME="vfs_get_tree"
     CRASH_FILE="fs/namespace.c"
-    FREE_FRAME="mntput"
+    FREE_FRAME="put_fs_context"
     ;;
   *)
     echo "Unknown pack: $PACK" >&2
@@ -114,4 +114,3 @@ echo "  Verdict: $VERDICT"
 echo ""
 echo "=== smoke_pack PASSED ==="
 echo "Artifacts in: $OUT_DIR"
-

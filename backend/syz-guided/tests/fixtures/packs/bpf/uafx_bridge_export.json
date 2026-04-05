@@ -1,0 +1,211 @@
+{
+  "arch": "arm64",
+  "condition_summary": {
+    "conditions": []
+  },
+  "constraint_summary": {
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Map/program/link objects must be created before later update or query paths use them."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Detach and close must race ahead of the later lookup-side use."
+      }
+    ],
+    "predicates": [
+      {
+        "must_hold_at": "escape",
+        "name": "bpf_map_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "bpf_link_attached",
+        "scope": "heuristic"
+      }
+    ],
+    "same_object": true
+  },
+  "efp_summary": {
+    "clobber_sites": [
+      {
+        "function": "bpf_link_free",
+        "stmt": "kfree(link)"
+      }
+    ],
+    "escape_sites": [
+      {
+        "function": "bpf_link_prime",
+        "object_hint": "struct bpf_link",
+        "stmt": "link = fdget_raw()"
+      }
+    ],
+    "fetch_sites": [
+      {
+        "function": "map_lookup_elem",
+        "object_hint": "struct bpf_link",
+        "stmt": "link = container_of(map, struct bpf_link, map)"
+      }
+    ]
+  },
+  "entry_summary": {
+    "entry_candidates": [
+      {
+        "confidence": "grounded",
+        "entry_func": "__sys_bpf",
+        "entry_kind_hint": "bpf_cmd"
+      }
+    ],
+    "top_entries": [
+      "__sys_bpf"
+    ]
+  },
+  "export_version": "0.2",
+  "flow": "Con",
+  "kernel_area": "kernel/bpf",
+  "loc0": {
+    "context": [
+      "__sys_bpf",
+      "bpf_link_free",
+      "kfree"
+    ],
+    "file": "kernel/bpf/syscall.c",
+    "function": "bpf_link_free",
+    "line": 4988
+  },
+  "loc1": {
+    "context": [
+      "__sys_bpf",
+      "map_lookup_elem",
+      "bpf_map_lookup_elem"
+    ],
+    "file": "kernel/bpf/syscall.c",
+    "function": "bpf_map_lookup_elem",
+    "line": 1632
+  },
+  "lock_summary": {
+    "locks": []
+  },
+  "raw_warning": {
+    "analysis_kind": "cross_entry_uaf",
+    "arch": "arm64",
+    "condition_ops": [],
+    "efp": {
+      "clobber_sites": [
+        {
+          "function": "bpf_link_free",
+          "stmt": "kfree(link)"
+        }
+      ],
+      "escape_sites": [
+        {
+          "function": "bpf_link_prime",
+          "object_hint": "struct bpf_link",
+          "stmt": "link = fdget_raw()"
+        }
+      ],
+      "fetch_sites": [
+        {
+          "function": "map_lookup_elem",
+          "object_hint": "struct bpf_link",
+          "stmt": "link = container_of(map, struct bpf_link, map)"
+        }
+      ]
+    },
+    "entry_candidates": [
+      {
+        "confidence": "grounded",
+        "function": "__sys_bpf",
+        "kind_hint": "bpf_cmd"
+      }
+    ],
+    "flow": "Con",
+    "free_site": {
+      "context": [
+        "__sys_bpf",
+        "bpf_link_free",
+        "kfree"
+      ],
+      "file": "kernel/bpf/syscall.c",
+      "function": "bpf_link_free",
+      "line": 4988
+    },
+    "kernel_area": "kernel/bpf",
+    "lock_ops": [],
+    "object_hints": {
+      "object_type": "struct bpf_link",
+      "same_object": true
+    },
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Map/program/link objects must be created before later update or query paths use them."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Detach and close must race ahead of the later lookup-side use."
+      }
+    ],
+    "predicate_hints": [
+      {
+        "must_hold_at": "escape",
+        "name": "bpf_map_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "bpf_link_attached",
+        "scope": "heuristic"
+      }
+    ],
+    "subsystem": "bpf",
+    "target_family": "bpf-arm64-v1",
+    "thread_ops": [
+      {
+        "context_role": "free",
+        "function": "__sys_bpf",
+        "kind": "syscall"
+      },
+      {
+        "context_role": "use",
+        "function": "__sys_bpf",
+        "kind": "syscall"
+      }
+    ],
+    "use_site": {
+      "context": [
+        "__sys_bpf",
+        "map_lookup_elem",
+        "bpf_map_lookup_elem"
+      ],
+      "file": "kernel/bpf/syscall.c",
+      "function": "bpf_map_lookup_elem",
+      "line": 1632
+    },
+    "warning_id": "uafx-bpf-arm64-0001"
+  },
+  "source_tool": "uafx",
+  "subsystem": "bpf",
+  "target_family": "bpf-arm64-v1",
+  "thread_summary": {
+    "events": [
+      {
+        "context_role": "free",
+        "function": "__sys_bpf",
+        "kind": "syscall"
+      },
+      {
+        "context_role": "use",
+        "function": "__sys_bpf",
+        "kind": "syscall"
+      }
+    ]
+  },
+  "warning_id": "uafx-bpf-arm64-0001"
+}

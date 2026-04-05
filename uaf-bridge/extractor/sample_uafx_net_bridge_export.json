@@ -1,0 +1,211 @@
+{
+  "arch": "arm64",
+  "condition_summary": {
+    "conditions": []
+  },
+  "constraint_summary": {
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "The nft set must be created before later get/dump messages can resolve it."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "The delete/get race requires teardown before a later dump-side use."
+      }
+    ],
+    "predicates": [
+      {
+        "must_hold_at": "escape",
+        "name": "netlink_socket_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "nft_object_visible",
+        "scope": "heuristic"
+      }
+    ],
+    "same_object": true
+  },
+  "efp_summary": {
+    "clobber_sites": [
+      {
+        "function": "nf_tables_destroy_set",
+        "stmt": "kfree(set)"
+      }
+    ],
+    "escape_sites": [
+      {
+        "function": "nf_tables_newset",
+        "object_hint": "struct nft_set",
+        "stmt": "set = nft_set_alloc()"
+      }
+    ],
+    "fetch_sites": [
+      {
+        "function": "nf_tables_getset",
+        "object_hint": "struct nft_set",
+        "stmt": "set = nft_set_lookup_byhandle()"
+      }
+    ]
+  },
+  "entry_summary": {
+    "entry_candidates": [
+      {
+        "confidence": "grounded",
+        "entry_func": "nfnetlink_rcv_batch",
+        "entry_kind_hint": "netlink_send"
+      }
+    ],
+    "top_entries": [
+      "nfnetlink_rcv_batch"
+    ]
+  },
+  "export_version": "0.2",
+  "flow": "Con",
+  "kernel_area": "net/netfilter",
+  "loc0": {
+    "context": [
+      "nfnetlink_rcv_batch",
+      "nf_tables_destroy_set",
+      "kfree"
+    ],
+    "file": "net/netfilter/nf_tables_api.c",
+    "function": "nf_tables_destroy_set",
+    "line": 6123
+  },
+  "loc1": {
+    "context": [
+      "nfnetlink_rcv_batch",
+      "nf_tables_getset",
+      "nf_tables_dump_set"
+    ],
+    "file": "net/netfilter/nf_tables_api.c",
+    "function": "nf_tables_dump_set",
+    "line": 7441
+  },
+  "lock_summary": {
+    "locks": []
+  },
+  "raw_warning": {
+    "analysis_kind": "cross_entry_uaf",
+    "arch": "arm64",
+    "condition_ops": [],
+    "efp": {
+      "clobber_sites": [
+        {
+          "function": "nf_tables_destroy_set",
+          "stmt": "kfree(set)"
+        }
+      ],
+      "escape_sites": [
+        {
+          "function": "nf_tables_newset",
+          "object_hint": "struct nft_set",
+          "stmt": "set = nft_set_alloc()"
+        }
+      ],
+      "fetch_sites": [
+        {
+          "function": "nf_tables_getset",
+          "object_hint": "struct nft_set",
+          "stmt": "set = nft_set_lookup_byhandle()"
+        }
+      ]
+    },
+    "entry_candidates": [
+      {
+        "confidence": "grounded",
+        "function": "nfnetlink_rcv_batch",
+        "kind_hint": "netlink_send"
+      }
+    ],
+    "flow": "Con",
+    "free_site": {
+      "context": [
+        "nfnetlink_rcv_batch",
+        "nf_tables_destroy_set",
+        "kfree"
+      ],
+      "file": "net/netfilter/nf_tables_api.c",
+      "function": "nf_tables_destroy_set",
+      "line": 6123
+    },
+    "kernel_area": "net/netfilter",
+    "lock_ops": [],
+    "object_hints": {
+      "object_type": "struct nft_set",
+      "same_object": true
+    },
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "The nft set must be created before later get/dump messages can resolve it."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "The delete/get race requires teardown before a later dump-side use."
+      }
+    ],
+    "predicate_hints": [
+      {
+        "must_hold_at": "escape",
+        "name": "netlink_socket_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "nft_object_visible",
+        "scope": "heuristic"
+      }
+    ],
+    "subsystem": "net",
+    "target_family": "net-netfilter-arm64-v1",
+    "thread_ops": [
+      {
+        "context_role": "free",
+        "function": "nfnetlink_rcv_batch",
+        "kind": "netlink_batch"
+      },
+      {
+        "context_role": "use",
+        "function": "nf_tables_dump_set",
+        "kind": "dump"
+      }
+    ],
+    "use_site": {
+      "context": [
+        "nfnetlink_rcv_batch",
+        "nf_tables_getset",
+        "nf_tables_dump_set"
+      ],
+      "file": "net/netfilter/nf_tables_api.c",
+      "function": "nf_tables_dump_set",
+      "line": 7441
+    },
+    "warning_id": "uafx-net-arm64-0001"
+  },
+  "source_tool": "uafx",
+  "subsystem": "net",
+  "target_family": "net-netfilter-arm64-v1",
+  "thread_summary": {
+    "events": [
+      {
+        "context_role": "free",
+        "function": "nfnetlink_rcv_batch",
+        "kind": "netlink_batch"
+      },
+      {
+        "context_role": "use",
+        "function": "nf_tables_dump_set",
+        "kind": "dump"
+      }
+    ]
+  },
+  "warning_id": "uafx-net-arm64-0001"
+}

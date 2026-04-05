@@ -1,7 +1,9 @@
 # madelin
 
-`madelin` is a monorepo for an artifact-driven Linux kernel fuzzing workflow that turns
-UAFX-discovered cross-entry UAF candidates into dynamic validation attempts:
+`madelin` is a monorepo for an artifact-driven Linux kernel validation workflow that turns
+UAFX-discovered cross-entry lifetime bugs (UAF candidates, teardown/state-machine hazards,
+and concurrency races) into dynamic, prefix-preserving validation attempts in hardware-light
+arm64 environments:
 
 1. `uafx/` performs static cross-entry UAF analysis.
 2. `uaf-bridge/` converts static warnings into canonical artifacts (`candidate.json`, `witness_plan.json`).
@@ -9,9 +11,23 @@ UAFX-discovered cross-entry UAF candidates into dynamic validation attempts:
    artifacts, synthesizes seeds, orchestrates campaigns, and triages crashes against
    the original candidate.
 
-The current practical target is Linux arm64 KVM.
+The system is pivoting from a KVM-only demo slice into a **target-pack** model, where KVM
+is one pack and additional packs cover software-reachable kernel subsystems runnable inside
+an ordinary arm64 Linux VM (no nested virtualization, no passthrough hardware).
 
 For AI/operator handoff, see [docs/ai/OPENCLAW-RUNBOOK.md](docs/ai/OPENCLAW-RUNBOOK.md).
+
+## Maturity By Target Pack
+
+Support claims are intentionally narrow and must match validated behavior.
+
+| Target pack | Goal | Status |
+|---|---|---|
+| `kvm` | arm64 KVM close-vs-run family (legacy/initial pack) | validated in artifact-level backend smokes; live KVM trigger still requires a Linux arm64 KVM host |
+| `io_uring` | ring lifecycle + teardown/state-machine families | scaffolded (fixtures + dry-run proof chain; no broad semantic synthesis claims) |
+| `net` | netlink / netfilter control-plane families | scaffolded (fixtures + dry-run proof chain) |
+| `bpf` | eBPF map/program/link lifecycle families | scaffolded (fixtures + dry-run proof chain) |
+| `fs` | mount API + FUSE lifecycle/teardown families | scaffolded (fixtures + dry-run proof chain) |
 
 ## Current Verifier Scope
 
@@ -19,14 +35,12 @@ The verifier stack is intentionally narrow today:
 
 - **Verdict layer**: current crash matching is KASAN/text-log driven and focused on
   candidate `loc0`/`loc1`, subsystem frames, and simple execution metadata.
-- **Runnable witness layer**: currently supports the narrow arm64 KVM subset
-  `openat$KVM`, `KVM_CREATE_VM`, `KVM_CREATE_VCPU`, `KVM_ARM_VCPU_INIT`,
-  `KVM_SET_ONE_REG`, `KVM_GET_ONE_REG`, and `KVM_RUN`.
-- **Harness layer**: currently supports one micro-harness family only, the arm64 KVM
-  timer close-vs-run candidate shape (`kvm_timer_vcpu_terminate` vs
-  `kvm_timer_should_fire` through `kvm_vcpu_ioctl`).
-- **Unsupported cases**: broader KVM device/IRQ templates, non-KVM candidates, broad
-  subsystem expansion, and generalized semantic argument synthesis are still out of scope.
+- **Runnable witness layer**: runnable-witness support remains conservative; target packs
+  may provide scaffolded witnesses for dry-run validation, with explicit unsupported cases.
+- **Harness layer**: KVM has a single micro-harness family today; other packs are expected
+  to start with small harnesses or runnable witness programs for artifact-level proofs.
+- **Unsupported cases**: broad subsystem expansion, generalized semantic argument synthesis,
+  and unconstrained schedule synthesis remain out of scope unless explicitly validated.
 
 ## Repository Layout
 
@@ -41,7 +55,7 @@ The verifier stack is intentionally narrow today:
 - `syzkaller/`
   Upstream syzkaller source tree (clean checkout — build locally to produce binaries).
 - `syzkaller-runtime-export/`
-  Preserved arm64 KVM runtime environment for reproducible execution
+  Preserved arm64 runtime environment for reproducible execution (KVM pack export)
   (kernel image, disk image, SSH key, manager config).
 
 ## What Works Today
@@ -55,7 +69,11 @@ The verifier stack is intentionally narrow today:
   classification.
 - Prefix-safe mutation preserves bootstrap prefix and sticky calls.
 - Relation guard validates resource chain integrity post-mutation.
-- 84 unit tests pass; 4 smoke scripts pass (seedgen, campaign, triage, vm_validator).
+- Full `uaf-bridge` pytest suite passes (`76` tests).
+- Full `backend/syz-guided` unittest suite passes (`88` tests).
+- Legacy backend smokes pass (`smoke_seedgen`, `smoke_campaign`, `smoke_triage`, `smoke_vm_validator`).
+- Pack-aware backend smokes pass for `kvm`, `io_uring`, `net`, `bpf`, and `fs`.
+- UAFX-first dry-run proofs pass end to end for `kvm`, `io_uring`, `net`, `bpf`, and `fs`.
 
 ### macOS QEMU TCG validation (`vm_validator/`)
 
@@ -79,19 +97,36 @@ uafx → uaf-bridge → backend/syz-guided
 
 ## Quick Start
 
-### Backend smoke (no KVM target required)
+### Backend smoke (no special hardware required)
 
 ```bash
 cd /path/to/madelin/backend/syz-guided
 bash scripts/smoke_seedgen.sh
 bash scripts/smoke_campaign.sh
 bash scripts/smoke_triage.sh
+bash scripts/smoke_pack.sh --pack io_uring
+bash scripts/smoke_pack.sh --pack net
+bash scripts/smoke_pack.sh --pack bpf
+bash scripts/smoke_pack.sh --pack fs
 ```
 
 All three pass without a live kernel. These validate seed synthesis, the orchestrator
-lifecycle, and triage report emission against the KVM fixture.
+lifecycle, and triage report emission against the fixture candidate(s).
 
-### Full arm64 KVM path
+### UAFX-first target-pack proof (no special hardware required)
+
+```bash
+cd /path/to/madelin
+bash scripts/e2e_target_pack_smoke.sh --pack io_uring
+bash scripts/e2e_target_pack_smoke.sh --pack net
+bash scripts/e2e_target_pack_smoke.sh --pack bpf
+bash scripts/e2e_target_pack_smoke.sh --pack fs
+```
+
+Each run proves the dry-run artifact chain:
+`raw warning -> bridge export -> candidate.json -> witness_plan.json -> witness/harness -> backend artifacts -> seeds -> campaign summary -> triage_report_v1.json`.
+
+### Linux KVM pack (legacy/initial)
 
 Follow steps 1–5 below.
 
@@ -119,7 +154,7 @@ environment. For the arm64 KVM path either:
 - build on a Linux host, then point `SYZ_DIR` at that tree's `bin/`, or
 - run the full arm64 KVM validation path on a Linux host directly.
 
-### 3. Generate bridge artifacts
+### 3. Generate bridge artifacts (KVM demo)
 
 ```bash
 cd uaf-bridge
@@ -140,7 +175,7 @@ bash scripts/smoke_campaign.sh
 bash scripts/smoke_triage.sh
 ```
 
-### 5. Live validation (requires arm64 KVM environment)
+### 5. Live validation (requires Linux arm64 KVM host)
 
 **On macOS (TCG, no KVM)** — one-shot seed execution:
 ```bash

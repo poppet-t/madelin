@@ -1,12 +1,27 @@
 {
   "barriers": [
     {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "Pointer must escape before later fetch/use chain."
+    },
+    {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "The fs_context must be created and configured before get_tree consumes it."
+    },
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "The close or release path must race ahead of the later mount-side use."
+    },
+    {
       "after": "use",
       "before": "free",
       "reason": "Use-after-free requires free to occur before use."
     }
   ],
-  "candidate_id": "cand_fixture_fs_0001",
+  "candidate_id": "cand_11b23ff5b9b267d9",
   "debug": {
     "check_result": "sat",
     "encoded_event_count": 6,
@@ -18,19 +33,24 @@
       "use",
       "cleanup"
     ],
-    "input_mapping_confidence": "fixture",
-    "soft_constraints": [],
+    "input_mapping_confidence": "manual",
+    "soft_constraints": [
+      "prefer_split_threads: free/use on different threads when feasible"
+    ],
     "solver": "z3.Optimize",
-    "solver_model_available": true
+    "unsat_reasons": []
   },
   "execution_hints": {
+    "candidate_flow": "Con",
     "entry_selection": {
-      "entry_func": "do_mount",
+      "entry_func": "vfs_get_tree",
       "entry_kind": "mount_api_step",
-      "template_id": "mount_api_lifecycle:mount_api_step:arm64-vm:v1"
+      "template_id": "vfs_get_tree:mount_api_step:fs-mount-arm64:v1"
     },
+    "min_threads": 2,
     "notes": [
-      "Fixture plan: uses the single mount API syscall template."
+      "Structural witness only: ordering, thread assignment, and readiness predicates are encoded.",
+      "Exact syscall argument synthesis remains intentionally out of scope for v1."
     ]
   },
   "ordered_steps": [
@@ -43,9 +63,40 @@
       "event": "use",
       "step_index": 1,
       "timestamp": 1
+    },
+    {
+      "event": "escape",
+      "step_index": 2,
+      "timestamp": 2
+    },
+    {
+      "event": "cleanup",
+      "step_index": 3,
+      "timestamp": 3
+    },
+    {
+      "event": "fetch",
+      "step_index": 4,
+      "timestamp": 4
+    },
+    {
+      "event": "init_resource",
+      "step_index": 5,
+      "timestamp": 5
     }
   ],
-  "predicates": [],
+  "predicates": [
+    {
+      "must_hold_at": "escape",
+      "name": "fs_context_ready",
+      "scope": "heuristic"
+    },
+    {
+      "must_hold_at": "fetch",
+      "name": "mount_tree_materialized",
+      "scope": "heuristic"
+    }
+  ],
   "sat": true,
   "schema_version": "witness_plan/v1",
   "status": "sat",
@@ -56,6 +107,26 @@
           "event": "free",
           "step_index": 0,
           "timestamp": 0
+        },
+        {
+          "event": "escape",
+          "step_index": 2,
+          "timestamp": 2
+        },
+        {
+          "event": "cleanup",
+          "step_index": 3,
+          "timestamp": 3
+        },
+        {
+          "event": "fetch",
+          "step_index": 4,
+          "timestamp": 4
+        },
+        {
+          "event": "init_resource",
+          "step_index": 5,
+          "timestamp": 5
         }
       ],
       "thread_id": 0
@@ -72,4 +143,3 @@
     }
   ]
 }
-

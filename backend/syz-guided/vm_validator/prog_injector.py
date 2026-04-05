@@ -15,9 +15,10 @@ def _scp_cmd(port: int, ssh_key: pathlib.Path) -> list[str]:
     """Base SCP command with standard options."""
     return [
         "scp",
+        "-O",
         "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=/dev/null",
-        "-o", "ConnectTimeout=10",
+        "-o", "ConnectTimeout=20",
         "-o", "LogLevel=ERROR",
         "-i", str(ssh_key),
         "-P", str(port),
@@ -30,7 +31,7 @@ def _ssh_cmd(port: int, ssh_key: pathlib.Path) -> list[str]:
         "ssh",
         "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=/dev/null",
-        "-o", "ConnectTimeout=10",
+        "-o", "ConnectTimeout=20",
         "-o", "LogLevel=ERROR",
         "-i", str(ssh_key),
         "-p", str(port),

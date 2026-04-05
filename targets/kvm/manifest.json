@@ -1,0 +1,54 @@
+{
+  "pack": "kvm",
+  "subsystem": "kvm",
+  "maturity": "legacy-initial",
+  "arch": "arm64",
+  "target_families": ["kvm-arm64-narrow"],
+  "kernel_area_prefixes": ["arch/arm64/kvm"],
+  "supported_entry_kinds": ["file_ioctl", "file_read", "file_write", "sysfs_show", "sysfs_store"],
+  "lifecycle_templates": [
+    "open -> create_vm -> create_vcpu -> init -> run -> close",
+    "open -> create_vm -> create_vcpu -> register accesses -> run"
+  ],
+  "witness_constraints": [
+    "Preserve /dev/kvm fd chain and KVM creation ordering.",
+    "Keep VCPU init before KVM_RUN."
+  ],
+  "resource_chain": [
+    {"resource": "fd_kvm", "type": "fd", "producer_call": "openat$KVM", "consumer_calls": ["ioctl$KVM_CREATE_VM"]},
+    {"resource": "fd_vm", "type": "fd", "producer_call": "ioctl$KVM_CREATE_VM", "consumer_calls": ["ioctl$KVM_CREATE_VCPU"]},
+    {"resource": "fd_vcpu", "type": "fd", "producer_call": "ioctl$KVM_CREATE_VCPU", "consumer_calls": ["ioctl$KVM_ARM_VCPU_INIT", "ioctl$KVM_SET_ONE_REG", "ioctl$KVM_GET_ONE_REG", "ioctl$KVM_RUN", "close$KVM"]}
+  ],
+  "phase_calls": {
+    "bootstrap": ["openat$KVM", "ioctl$KVM_CREATE_VM", "ioctl$KVM_CREATE_VCPU"],
+    "configure": ["ioctl$KVM_ARM_VCPU_INIT", "ioctl$KVM_SET_ONE_REG", "ioctl$KVM_GET_ONE_REG"],
+    "trigger": ["ioctl$KVM_RUN", "close$KVM"]
+  },
+  "favored_suffix_calls": ["ioctl$KVM_RUN", "close$KVM"],
+  "call_aliases": {"openat$kvm": "openat$KVM"},
+  "seed_variants": [
+    {"name": "full_run", "suffix": ["ioctl$KVM_RUN"]},
+    {"name": "run_close", "suffix": ["ioctl$KVM_RUN", "close$KVM"]},
+    {"name": "double_run", "suffix": ["ioctl$KVM_RUN", "ioctl$KVM_RUN"]},
+    {"name": "close_only", "suffix": ["close$KVM"]}
+  ],
+  "syz_call_map": {
+    "openat$KVM": "r0 = openat$kvm(0xffffffffffffff9c, &AUTO=\"/dev/kvm\\x00\", 0x2, 0x0)",
+    "ioctl$KVM_CREATE_VM": "r1 = ioctl$KVM_CREATE_VM(r0, 0xae01, 0x0)",
+    "ioctl$KVM_CREATE_VCPU": "r2 = ioctl$KVM_CREATE_VCPU(r1, 0xae41, 0x0)",
+    "ioctl$KVM_ARM_VCPU_INIT": "ioctl$KVM_ARM_VCPU_INIT(r2, 0xae02, &AUTO={0x0, 0x0})",
+    "ioctl$KVM_SET_ONE_REG": "ioctl$KVM_SET_ONE_REG(r2, 0xae04, &AUTO={0x6030000000100042, &AUTO=0x0})",
+    "ioctl$KVM_GET_ONE_REG": "ioctl$KVM_GET_ONE_REG(r2, 0xae05, &AUTO={0x6030000000100042, &AUTO})",
+    "ioctl$KVM_RUN": "ioctl$KVM_RUN(r2, 0xae80, 0x0)",
+    "close$KVM": "close(r2)"
+  },
+  "triage_signal_rules": [
+    "KASAN UAF with focus frame match.",
+    "KASAN UAF with focus file match."
+  ],
+  "fixture_paths": {
+    "raw_warning": "uaf-bridge/uafx_fork/samples/raw_uafx_kvm_warning.json",
+    "bridge_export": "uaf-bridge/extractor/sample_uafx_kvm_bridge_export.json",
+    "backend_fixture_dir": "backend/syz-guided/tests/fixtures"
+  }
+}

@@ -1,85 +1,60 @@
 # Testing Guide
 
 ## Philosophy
-Run the smallest relevant checks first.
-Expand only when the patch or risk justifies it.
+Run the smallest relevant checks first. Expand only when the patch or risk justifies it.
 
 ## Testing layers in this repo
 
-### Layer 1 — contract/artifact tests
+### Layer 1 — artifact/contract tests (bridge-side)
 Purpose:
-- verify UAFX -> bridge -> MOCK handoff structure
+- preserve `candidate.json` and `witness_plan.json` semantics
+- keep transforms deterministic up to runtime
+- ensure unsupported cases fail explicitly
 
 Examples:
-- bridge export shape
-- candidate.json generation
-- witness_plan.json generation
-- mock_seed.json generation
-- importer artifact correctness
+- UAFX bridge-export import shape
+- entry classification normalization
+- syscall template selection
+- witness-plan determinism and ordering semantics
 
-### Layer 2 — dry-run / tooling tests
+### Layer 2 — runnable-witness / harness emission tests
 Purpose:
-- verify seeded workflow inputs are sane
+- validate that emitted `witness.syz` and/or micro-harnesses match the selected plan and template family
+- validate pack-specific constraints (resource flow, thread metadata, family selection)
 
 Examples:
-- dry-run summary
-- seed workdir generation
-- relation file generation
-- bias config generation
-- corpus histogram summaries
+- `uaf-bridge/runtime/emit_witness_syz.py` + `validate_witness.py`
+- `uaf-bridge/harness/generate_harness.py`
 
-### Layer 3 — runtime smoke tests
+### Layer 3 — backend dry-run proofs (no special hardware)
 Purpose:
-- verify seeded fuzzing starts and loads the expected inputs
+- prove end-to-end artifact consumption and runtime artifact generation
 
 Examples:
-- seeded short run
-- unseeded short baseline
-- config/debug summaries
-- run-limited smoke tests
+- `backend/syz-guided/state_model/build_state_model.py`
+- `backend/syz-guided/seedgen/synthesize_seeds.py`
+- orchestrator/campaign dry-run
+- triage report emission against synthetic crash logs
 
-### Layer 4 — comparative experiments
+### Layer 4 — live execution proofs (hardware-light by default)
 Purpose:
-- measure whether seeded structure actually helps
+- execute at least one `.prog` against a real kernel and feed output into triage
 
 Examples:
-- seeded vs unseeded corpus KVM ratio
-- syscall family histogram deltas
-- coverage or corpus growth comparisons
-- crash or warning comparisons
+- `vm_validator` one-shot execution under QEMU TCG
+- Linux KVM host one-shot execution for the `kvm` pack
+- bounded `syz-manager` campaign (Linux KVM host)
 
 ## Default verification order
 1. nearby unit tests
-2. artifact generation tests
-3. importer / tooling tests
-4. dry-run checks
-5. short seeded smoke run
-6. seeded vs unseeded comparison only when ready
+2. artifact-level contract tests
+3. backend dry-run smokes
+4. optional one-shot runtime execution proof
+5. broader campaigns only after the above pass
 
 ## Required in summaries
 Every implementation summary must include:
 - commands run
-- whether they passed or failed
-- whether verification was artifact-level, dry-run, or runtime-level
-- any known untested paths
-
-## Examples
-### Bridge mapping change
-- run bridge tests
-- regenerate demo seed
-- inspect `mock_seed.json`
-
-### MOCK importer change
-- run importer tests
-- run seed prep script
-- inspect generated workdir
-
-### Healer CLI/debug change
-- run targeted tests
-- run dry-run command
-- optionally run a short `--max-seconds` smoke run
-
-### Bias logic change
-- run importer tests
-- inspect bias artifact
-- compare seeded vs unseeded histograms if feasible
+- pass/fail
+- whether verification was artifact-level, backend dry-run, or live execution
+- any untested packs/families

@@ -1,12 +1,12 @@
 ---
 name: witness-bridge-task
-description: Use for changes to the UAFX -> candidate -> SMT -> runtime -> MOCK bridge. Enforces contract preservation, narrow diffs, and validation discipline.
+description: Use for changes to the UAFX -> candidate -> SMT -> runtime bridge. Enforces contract preservation, narrow diffs, and validation discipline.
 ---
 
 # witness-bridge-task
 
 ## Use this when
-- Editing extraction, mapping, SMT, runtime emission, or MOCK import logic
+- Editing extraction, mapping, SMT, runtime emission, or backend-facing handoff logic
 - Changing artifact boundaries
 - Adding support for a narrow new entry family
 - Debugging witness feasibility or scaffold generation
@@ -29,9 +29,15 @@ Before editing, identify whether the change affects:
 - candidate schema
 - witness plan schema
 - runtime emitter assumptions
-- mock seed importer assumptions
 - ordering semantics
 - stable resource prefix expectations
+
+If adding a target pack, do it in this order:
+1. pack metadata (manifest + maturity)
+2. normalized entry kinds
+3. fixture bridge export -> candidate -> witness plan
+4. dry-run backend proof to triage artifact
+5. docs updates with conservative support claims
 
 ## Execution sequence
 1. Find the exact producer and consumer boundaries touched.

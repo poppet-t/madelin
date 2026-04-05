@@ -1,0 +1,100 @@
+{
+  "warning_id": "uafx-fs-arm64-0001",
+  "analysis_kind": "cross_entry_uaf",
+  "kernel_area": "fs/namespace",
+  "subsystem": "fs",
+  "target_family": "fs-mount-arm64-v1",
+  "arch": "arm64",
+  "flow": "Con",
+  "free_site": {
+    "function": "put_fs_context",
+    "file": "fs/fs_context.c",
+    "line": 342,
+    "context": [
+      "fscontext_release",
+      "put_fs_context",
+      "kfree"
+    ]
+  },
+  "use_site": {
+    "function": "vfs_get_tree",
+    "file": "fs/namespace.c",
+    "line": 1665,
+    "context": [
+      "vfs_get_tree",
+      "do_new_mount_fc",
+      "path_mount"
+    ]
+  },
+  "entry_candidates": [
+    {
+      "function": "vfs_get_tree",
+      "kind_hint": "mount_api_step",
+      "confidence": "grounded"
+    }
+  ],
+  "object_hints": {
+    "same_object": true,
+    "object_type": "struct fs_context"
+  },
+  "efp": {
+    "escape_sites": [
+      {
+        "function": "__do_sys_fsopen",
+        "stmt": "fc = fs_context_for_mount()",
+        "object_hint": "struct fs_context"
+      }
+    ],
+    "fetch_sites": [
+      {
+        "function": "vfs_get_tree",
+        "stmt": "fc = fdget_raw()",
+        "object_hint": "struct fs_context"
+      }
+    ],
+    "clobber_sites": [
+      {
+        "function": "put_fs_context",
+        "stmt": "kfree(fc)"
+      }
+    ]
+  },
+  "lock_ops": [],
+  "condition_ops": [],
+  "thread_ops": [
+    {
+      "kind": "syscall",
+      "function": "fscontext_release",
+      "context_role": "free"
+    },
+    {
+      "kind": "syscall",
+      "function": "vfs_get_tree",
+      "context_role": "use"
+    }
+  ],
+  "partial_order": [
+    {
+      "before": "escape",
+      "after": "fetch",
+      "reason": "The fs_context must be created and configured before get_tree consumes it."
+    },
+    {
+      "before": "free",
+      "after": "use",
+      "reason": "The close or release path must race ahead of the later mount-side use."
+    }
+  ],
+  "predicate_hints": [
+    {
+      "name": "fs_context_ready",
+      "must_hold_at": "escape",
+      "scope": "heuristic"
+    },
+    {
+      "name": "mount_tree_materialized",
+      "must_hold_at": "fetch",
+      "scope": "heuristic"
+    }
+  ]
+}

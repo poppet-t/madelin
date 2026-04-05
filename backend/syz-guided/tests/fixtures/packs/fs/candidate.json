@@ -1,11 +1,11 @@
 {
   "analysis_context": {
     "arch": "arm64",
-    "kernel_area": "fs",
+    "kernel_area": "fs/namespace",
     "subsystem": "fs",
-    "target_family": "arm64-vm-software"
+    "target_family": "fs-mount-arm64-v1"
   },
-  "candidate_id": "cand_fixture_fs_0001",
+  "candidate_id": "cand_11b23ff5b9b267d9",
   "constraints": {
     "events": [
       "init_resource",
@@ -26,35 +26,63 @@
         "after": "use",
         "before": "free",
         "reason": "Use-after-free requires free to occur before use."
+      },
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "The fs_context must be created and configured before get_tree consumes it."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "The close or release path must race ahead of the later mount-side use."
       }
     ],
-    "predicates": [],
-    "same_object": null
+    "predicates": [
+      {
+        "must_hold_at": "escape",
+        "name": "fs_context_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "mount_tree_materialized",
+        "scope": "heuristic"
+      }
+    ],
+    "same_object": true
   },
   "entries": [
     {
-      "entry_func": "do_mount",
+      "entry_func": "vfs_get_tree",
       "entry_kind": "mount_api_step",
-      "grounded": true,
-      "heuristic": false,
+      "grounded": {
+        "confidence": "grounded",
+        "entry_func": "vfs_get_tree",
+        "entry_kind": "mount_api_step",
+        "entry_kind_hint": "mount_api_step",
+        "mapping_source": "manual"
+      },
+      "heuristic": {},
       "support_level": "grounded",
       "supported": true,
       "syscall_templates": [
         {
-          "template_id": "mount_api_lifecycle:mount_api_step:arm64-vm:v1",
           "calls": [
-            "fsopen(&fs, 0x0)",
-            "fsconfig(fd_fs, 0x0, &key, &val, 0x0)",
-            "fsmount(fd_fs, 0x0, 0x0)",
-            "move_mount(fd_mnt, 0x0, AT_FDCWD, &dst, 0x0)",
-            "umount2(&dst, 0x0)",
-            "close(fd_fs)"
+            "fsopen('tmpfs', 0)",
+            "fsconfig$SET_STRING(fd_fsctx, FSCONFIG_SET_STRING, 'size', '4096', 0)",
+            "fsmount(fd_fsctx, 0, 0)",
+            "move_mount(fd_mount, '', AT_FDCWD, '/tmp/madelin', 0)",
+            "umount2('/tmp/madelin', 0)",
+            "close$fsmount(fd_mount)",
+            "close$fsopen(fd_fsctx)"
           ],
+          "notes": "Hardware-light mount API scaffold covering fsopen/fsconfig/fsmount/move_mount teardown.",
           "required_resources": [
-            "fd_fs",
-            "fd_mnt"
+            "fd_fsctx",
+            "fd_mount"
           ],
-          "notes": "Fixture: fsopen/fsconfig/fsmount/move_mount/umount sequence."
+          "template_id": "vfs_get_tree:mount_api_step:fs-mount-arm64:v1"
         }
       ],
       "unsupported_reasons": []
@@ -63,45 +91,147 @@
   "flow": "Con",
   "loc0": {
     "context": [
-      "mntput"
+      "fscontext_release",
+      "put_fs_context",
+      "kfree"
     ],
-    "file": "fs/namespace.c",
-    "function": "mntput",
-    "line": 5555
+    "file": "fs/fs_context.c",
+    "function": "put_fs_context",
+    "line": 342
   },
   "loc1": {
     "context": [
-      "do_mount"
+      "vfs_get_tree",
+      "do_new_mount_fc",
+      "path_mount"
     ],
     "file": "fs/namespace.c",
-    "function": "do_mount",
-    "line": 6666
+    "function": "vfs_get_tree",
+    "line": 1665
   },
   "provenance": {
-    "normalizer": "backend-fixture",
-    "raw_warning_sha256_prefix": "0000000000000000",
-    "warning_id": "uafx-fs-0001"
+    "normalizer": "extractor.import_uafx_bridge_export",
+    "raw_warning_sha256_prefix": "0e1f110c2889d473",
+    "warning_id": "uafx-fs-arm64-0001"
   },
   "raw_warning": {
-    "warning_id": "uafx-fs-0001",
-    "note": "Synthetic fixture warning; used for backend dry-run validation only."
+    "analysis_kind": "cross_entry_uaf",
+    "arch": "arm64",
+    "condition_ops": [],
+    "efp": {
+      "clobber_sites": [
+        {
+          "function": "put_fs_context",
+          "stmt": "kfree(fc)"
+        }
+      ],
+      "escape_sites": [
+        {
+          "function": "__do_sys_fsopen",
+          "object_hint": "struct fs_context",
+          "stmt": "fc = fs_context_for_mount()"
+        }
+      ],
+      "fetch_sites": [
+        {
+          "function": "vfs_get_tree",
+          "object_hint": "struct fs_context",
+          "stmt": "fc = fdget_raw()"
+        }
+      ]
+    },
+    "entry_candidates": [
+      {
+        "confidence": "grounded",
+        "function": "vfs_get_tree",
+        "kind_hint": "mount_api_step"
+      }
+    ],
+    "flow": "Con",
+    "free_site": {
+      "context": [
+        "fscontext_release",
+        "put_fs_context",
+        "kfree"
+      ],
+      "file": "fs/fs_context.c",
+      "function": "put_fs_context",
+      "line": 342
+    },
+    "kernel_area": "fs/namespace",
+    "lock_ops": [],
+    "object_hints": {
+      "object_type": "struct fs_context",
+      "same_object": true
+    },
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "The fs_context must be created and configured before get_tree consumes it."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "The close or release path must race ahead of the later mount-side use."
+      }
+    ],
+    "predicate_hints": [
+      {
+        "must_hold_at": "escape",
+        "name": "fs_context_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "mount_tree_materialized",
+        "scope": "heuristic"
+      }
+    ],
+    "subsystem": "fs",
+    "target_family": "fs-mount-arm64-v1",
+    "thread_ops": [
+      {
+        "context_role": "free",
+        "function": "fscontext_release",
+        "kind": "syscall"
+      },
+      {
+        "context_role": "use",
+        "function": "vfs_get_tree",
+        "kind": "syscall"
+      }
+    ],
+    "use_site": {
+      "context": [
+        "vfs_get_tree",
+        "do_new_mount_fc",
+        "path_mount"
+      ],
+      "file": "fs/namespace.c",
+      "function": "vfs_get_tree",
+      "line": 1665
+    },
+    "warning_id": "uafx-fs-arm64-0001"
   },
   "schema_version": "candidate/v1",
   "source": {
-    "raw_file": "tests/fixtures/packs/fs/uafx_bridge_export.json",
+    "raw_file": "/Users/CJ/Desktop/Kernel-stuff/madelin/backend/syz-guided/tests/fixtures/packs/fs/uafx_bridge_export.json",
     "tool": "uafx-bridge-import",
-    "version": "0.1"
+    "version": "0.2"
   },
   "status": {
     "grounded_entries": [
-      "do_mount"
+      "vfs_get_tree"
     ],
     "heuristic_entries": [],
-    "mapping_confidence": "fixture",
+    "mapping_confidence": "manual",
     "ready_for_smt": true,
     "supported": true,
     "unsupported_entries": [],
-    "unsupported_reasons": []
+    "unsupported_reasons": [
+      "heuristic predicate preserved: fs_context_ready",
+      "heuristic predicate preserved: mount_tree_materialized"
+    ]
   }
 }
-

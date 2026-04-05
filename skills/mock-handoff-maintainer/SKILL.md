@@ -1,15 +1,15 @@
 ---
 name: mock-handoff-maintainer
-description: Maintain the bridge-to-MOCK import path, including seed import, relations, and bias generation, without hidden coupling.
+description: Archived. The legacy mock/ runtime path was removed; do not use for new work.
 ---
 
-# mock-handoff-maintainer
+# mock-handoff-maintainer (archived)
+
+This skill is kept only as historical reference. The `mock/` directory has been removed and
+`backend/syz-guided/` is the runtime consumer.
 
 ## Use this when
-- editing `mock/tools/import_bridge_seed.py`
-- changing relations or bias generation
-- changing seed import behavior
-- changing KVM seed preparation scripts
+- you are auditing historical context or old writeups that reference `mock/`
 
 ## Read first
 - `AGENTS.md`
@@ -32,7 +32,6 @@ description: Maintain the bridge-to-MOCK import path, including seed import, rel
 - risks / assumptions
 
 ## Guardrails
-- keep the bridge and MOCK connected by explicit artifacts, not hidden coupling
+- keep runtime consumers connected by explicit artifacts, not hidden coupling
 - preserve stable prefix intent where applicable
 - fail clearly on unsupported imported shapes
-

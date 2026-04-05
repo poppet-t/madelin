@@ -31,7 +31,10 @@ def test_emit_witness_syz_renders_runnable_kvm_program() -> None:
     summary = validate_witness(candidate, plan, witness, syz_root=SYZ_ROOT)
 
     assert candidate["candidate_id"] in witness
-    assert "# plan_step step_index=0 event=free thread=0 timestamp=0" in witness
+    assert any(
+        line.startswith("# plan_step step_index=0 event=free")
+        for line in witness.splitlines()
+    )
     assert "openat$kvm(" in witness
     assert "ioctl$KVM_ARM_VCPU_INIT" in witness
     assert "ioctl$KVM_GET_ONE_REG" in witness

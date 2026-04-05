@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Synthesize runnable syzkaller .prog seeds from state_model_v1.json.
-
-Seeds preserve the mandatory bootstrap prefix and the KVM resource chain.
-Each seed is a text file in syzkaller's prog format.
-
-Usage:
-    python synthesize_seeds.py \
-        --state-model path/to/state_model_v1.json \
-        --out-dir path/to/seeds/
-"""
+"""Synthesize runnable syzkaller .prog seeds from state_model_v1.json."""
 
 from __future__ import annotations
 
@@ -16,68 +7,10 @@ import argparse
 import json
 import pathlib
 import sys
-from typing import Any
 
-# ---------------------------------------------------------------------------
-# Pack call → syz line mappings (v1: dry-run runnable text, not semantic synthesis)
-# ---------------------------------------------------------------------------
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-_SYZ_CALL_MAPS: dict[str, dict[str, str]] = {
-    "kvm": {
-        "openat$KVM": 'r0 = openat$kvm(0xffffffffffffff9c, &AUTO="/dev/kvm\\x00", 0x2, 0x0)',
-        "ioctl$KVM_CREATE_VM": "r1 = ioctl$KVM_CREATE_VM(r0, 0xae01, 0x0)",
-        "ioctl$KVM_CREATE_VCPU": "r2 = ioctl$KVM_CREATE_VCPU(r1, 0xae41, 0x0)",
-        "ioctl$KVM_ARM_VCPU_INIT": "ioctl$KVM_ARM_VCPU_INIT(r2, 0xae02, &AUTO={0x0, 0x0})",
-        "ioctl$KVM_SET_ONE_REG": "ioctl$KVM_SET_ONE_REG(r2, 0xae04, &AUTO={0x6030000000100042, &AUTO=0x0})",
-        "ioctl$KVM_GET_ONE_REG": "ioctl$KVM_GET_ONE_REG(r2, 0xae05, &AUTO={0x6030000000100042, &AUTO})",
-        "ioctl$KVM_RUN": "ioctl$KVM_RUN(r2, 0xae80, 0x0)",
-        "close$KVM": "close(r2)",
-    },
-    "io_uring": {
-        "io_uring_setup": "r0 = io_uring_setup(0x8, &AUTO)",
-        "io_uring_register": "io_uring_register(r0, 0x0, &AUTO, 0x0)",
-        "io_uring_enter": "io_uring_enter(r0, 0x1, 0x0, 0x0, 0x0, 0x0)",
-        "close": "close(r0)",
-    },
-    "net": {
-        "socket$nl_netfilter": "r0 = socket$nl_netfilter(0x10, 0x3, 0xc)",
-        "socket$nl_generic": "r0 = socket$nl_generic(0x10, 0x3, 0x10)",
-        "socket$nl_route": "r0 = socket$nl_route(0x10, 0x3, 0x0)",
-        "sendmsg$NFT_BATCH": "sendmsg$NFT_BATCH(r0, &AUTO, 0x0)",
-        "sendmsg$NETLINK": "sendmsg$NETLINK(r0, &AUTO, 0x0)",
-        "sendmsg": "sendmsg(r0, &AUTO, 0x0)",
-        "recvmsg": "recvmsg(r0, &AUTO, 0x0)",
-        "close": "close(r0)",
-    },
-    "bpf": {
-        "bpf$MAP_CREATE": "r0 = bpf$MAP_CREATE(0x0, &AUTO)",
-        "bpf$PROG_LOAD": "r1 = bpf$PROG_LOAD(0x0, &AUTO)",
-        "bpf$PROG_ATTACH": "bpf$PROG_ATTACH(0x0, &AUTO)",
-        "bpf$BPF_LINK_CREATE": "r2 = bpf$BPF_LINK_CREATE(0x0, &AUTO)",
-        "bpf$MAP_UPDATE_ELEM": "bpf$MAP_UPDATE_ELEM(0x0, &AUTO)",
-        "bpf$MAP_LOOKUP_ELEM": "bpf$MAP_LOOKUP_ELEM(0x0, &AUTO)",
-        "bpf$PROG_DETACH": "bpf$PROG_DETACH(0x0, &AUTO)",
-        "close": "close(r0)",
-    },
-    "fs": {
-        "fsopen": "r0 = fsopen(&AUTO=\"ext4\\x00\", 0x0)",
-        "fsconfig": "fsconfig(r0, 0x0, &AUTO, &AUTO, 0x0)",
-        "fsmount": "r1 = fsmount(r0, 0x0, 0x0)",
-        "move_mount": "move_mount(r1, 0x0, 0xffffffffffffff9c, &AUTO, 0x0)",
-        "open_tree": "r2 = open_tree(0xffffffffffffff9c, &AUTO, 0x0)",
-        "mount_setattr": "mount_setattr(r1, 0xffffffff, &AUTO, 0x0)",
-        "umount2": "umount2(&AUTO, 0x0)",
-        "openat$FUSE": "r0 = openat$FUSE(0xffffffffffffff9c, &AUTO=\"/dev/fuse\\x00\", 0x2, 0x0)",
-        "close": "close(r0)",
-    },
-}
-
-_KVM_SEED_VARIANTS = [
-    {"name": "full_run", "suffix": ["ioctl$KVM_RUN"]},
-    {"name": "run_close", "suffix": ["ioctl$KVM_RUN", "close$KVM"]},
-    {"name": "double_run", "suffix": ["ioctl$KVM_RUN", "ioctl$KVM_RUN"]},
-    {"name": "close_only", "suffix": ["close$KVM"]},
-]
+from pack_registry import resolve_target_manifest
 
 
 def _render_prog(
@@ -87,7 +20,6 @@ def _render_prog(
     immutable_prefix_len: int,
     call_map: dict[str, str],
 ) -> str:
-    """Render a list of canonical call names into syzkaller prog text."""
     lines = [f"# candidate: {candidate_id}"]
     lines.append(f"# variant: {variant_name}")
     lines.append(f"# immutable_prefix: {immutable_prefix_len}")
@@ -101,61 +33,38 @@ def _render_prog(
 
     return "\n".join(lines) + "\n"
 
-def _pick_call_map(state_model: dict) -> dict[str, str]:
-    subsystem = state_model.get("subsystem", "kvm")
-    if subsystem not in _SYZ_CALL_MAPS:
-        raise ValueError(f"Unsupported subsystem for seed synthesis: {subsystem}")
-    return _SYZ_CALL_MAPS[subsystem]
+
+def _manifest_for_state_model(state_model: dict) -> dict:
+    return resolve_target_manifest(
+        subsystem=state_model.get("subsystem") if isinstance(state_model.get("subsystem"), str) else None,
+        target_family=state_model.get("target_family") if isinstance(state_model.get("target_family"), str) else None,
+    )
 
 
-def _generic_seed_variants(state_model: dict, call_map: dict[str, str]) -> list[dict[str, Any]]:
-    """Generate simple suffix permutations from trigger calls."""
-    trigger = [c for c in state_model["phases"]["trigger"]["calls"] if c in call_map]
-    suffix0 = trigger[:1] if trigger else []
-
-    close_call = "close" if "close" in call_map else None
-    umount_call = "umount2" if "umount2" in call_map else None
-
-    variants: list[dict[str, Any]] = []
-    variants.append({"name": "full", "suffix": suffix0})
-    if suffix0:
-        variants.append({"name": "double_trigger", "suffix": suffix0 + suffix0})
-    if close_call:
-        variants.append({"name": "close_only", "suffix": [close_call]})
-        if suffix0:
-            variants.append({"name": "trigger_close", "suffix": suffix0 + [close_call]})
-    if umount_call and (not suffix0 or suffix0[0] != umount_call):
-        variants.append({"name": "umount_only", "suffix": [umount_call]})
-
-    # De-dup by (name, suffix).
-    deduped = []
-    seen: set[tuple[str, tuple[str, ...]]] = set()
-    for v in variants:
-        key = (v["name"], tuple(v["suffix"]))
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(v)
-    return deduped
+def _seed_variants(state_model: dict, manifest: dict) -> list[dict]:
+    variants = manifest.get("seed_variants", [])
+    if not isinstance(variants, list) or not variants:
+        trigger_calls = state_model.get("phases", {}).get("trigger", {}).get("calls", [])
+        return [{"name": "full", "suffix": [str(call) for call in trigger_calls if isinstance(call, str)]}]
+    return [variant for variant in variants if isinstance(variant, dict)]
 
 
 def synthesize(state_model: dict) -> list[dict]:
-    """Generate seed programs from state model. Returns list of {name, calls, prog_text}."""
     bootstrap = state_model["phases"]["bootstrap"]["calls"]
     configure = state_model["phases"]["configure"]["calls"]
     candidate_id = state_model["candidate_id"]
-    call_map = _pick_call_map(state_model)
     immutable_prefix_len = int(state_model.get("immutable_prefix_len", len(bootstrap)))
+    manifest = _manifest_for_state_model(state_model)
+    call_map = {str(key): str(value) for key, value in manifest.get("syz_call_map", {}).items() if isinstance(key, str)}
+    variants = _seed_variants(state_model, manifest)
 
     seeds = []
-    subsystem = state_model.get("subsystem", "kvm")
-    variants = _KVM_SEED_VARIANTS if subsystem == "kvm" else _generic_seed_variants(state_model, call_map)
-
     for variant in variants:
-        calls = bootstrap + configure + variant["suffix"]
-        prog_text = _render_prog(calls, candidate_id, variant["name"], immutable_prefix_len, call_map)
+        suffix = [str(call) for call in variant.get("suffix", []) if isinstance(call, str)]
+        calls = list(bootstrap) + list(configure) + suffix
+        prog_text = _render_prog(calls, candidate_id, str(variant.get("name", "variant")), immutable_prefix_len, call_map)
         seeds.append({
-            "name": f"seed_{variant['name']}.prog",
+            "name": f"seed_{variant.get('name', 'variant')}.prog",
             "calls": calls,
             "prog_text": prog_text,
         })
@@ -164,7 +73,6 @@ def synthesize(state_model: dict) -> list[dict]:
 
 
 def emit_manifest(seeds: list[dict], state_model: dict) -> dict:
-    """Produce a seed manifest for the orchestrator."""
     return {
         "candidate_id": state_model["candidate_id"],
         "schema_version": "seed_manifest/v1",
@@ -172,10 +80,10 @@ def emit_manifest(seeds: list[dict], state_model: dict) -> dict:
         "immutable_prefix_len": state_model["immutable_prefix_len"],
         "seeds": [
             {
-                "name": s["name"],
-                "call_count": len(s["calls"]),
+                "name": seed["name"],
+                "call_count": len(seed["calls"]),
             }
-            for s in seeds
+            for seed in seeds
         ],
     }
 

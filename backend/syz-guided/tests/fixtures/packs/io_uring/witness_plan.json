@@ -6,12 +6,22 @@
       "reason": "Pointer must escape before later fetch/use chain."
     },
     {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "The ring context must be created before register/enter recover it from the file descriptor."
+    },
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "The teardown race requires ring free to happen before a later enter-side use."
+    },
+    {
       "after": "use",
       "before": "free",
       "reason": "Use-after-free requires free to occur before use."
     }
   ],
-  "candidate_id": "cand_fixture_io_uring_0001",
+  "candidate_id": "cand_2da2ab11b4a02071",
   "debug": {
     "check_result": "sat",
     "encoded_event_count": 6,
@@ -23,19 +33,24 @@
       "use",
       "cleanup"
     ],
-    "input_mapping_confidence": "fixture",
-    "soft_constraints": [],
+    "input_mapping_confidence": "manual",
+    "soft_constraints": [
+      "prefer_split_threads: free/use on different threads when feasible"
+    ],
     "solver": "z3.Optimize",
-    "solver_model_available": true
+    "unsat_reasons": []
   },
   "execution_hints": {
+    "candidate_flow": "Con",
     "entry_selection": {
-      "entry_func": "io_uring_enter",
+      "entry_func": "__do_sys_io_uring_enter",
       "entry_kind": "io_uring_enter",
-      "template_id": "io_uring_ring_lifecycle:io_uring_enter:arm64-vm:v1"
+      "template_id": "__do_sys_io_uring_enter:io_uring_enter:io-uring-arm64:v1"
     },
+    "min_threads": 2,
     "notes": [
-      "Fixture plan: uses the single io_uring syscall template."
+      "Structural witness only: ordering, thread assignment, and readiness predicates are encoded.",
+      "Exact syscall argument synthesis remains intentionally out of scope for v1."
     ]
   },
   "ordered_steps": [
@@ -48,9 +63,40 @@
       "event": "use",
       "step_index": 1,
       "timestamp": 1
+    },
+    {
+      "event": "escape",
+      "step_index": 2,
+      "timestamp": 2
+    },
+    {
+      "event": "cleanup",
+      "step_index": 3,
+      "timestamp": 3
+    },
+    {
+      "event": "fetch",
+      "step_index": 4,
+      "timestamp": 4
+    },
+    {
+      "event": "init_resource",
+      "step_index": 5,
+      "timestamp": 5
     }
   ],
-  "predicates": [],
+  "predicates": [
+    {
+      "must_hold_at": "fetch",
+      "name": "io_uring_files_registered",
+      "scope": "heuristic"
+    },
+    {
+      "must_hold_at": "escape",
+      "name": "io_uring_ring_ready",
+      "scope": "heuristic"
+    }
+  ],
   "sat": true,
   "schema_version": "witness_plan/v1",
   "status": "sat",
@@ -61,6 +107,26 @@
           "event": "free",
           "step_index": 0,
           "timestamp": 0
+        },
+        {
+          "event": "escape",
+          "step_index": 2,
+          "timestamp": 2
+        },
+        {
+          "event": "cleanup",
+          "step_index": 3,
+          "timestamp": 3
+        },
+        {
+          "event": "fetch",
+          "step_index": 4,
+          "timestamp": 4
+        },
+        {
+          "event": "init_resource",
+          "step_index": 5,
+          "timestamp": 5
         }
       ],
       "thread_id": 0

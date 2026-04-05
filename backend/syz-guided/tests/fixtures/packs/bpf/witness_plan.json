@@ -1,12 +1,27 @@
 {
   "barriers": [
     {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "Map/program/link objects must be created before later update or query paths use them."
+    },
+    {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "Pointer must escape before later fetch/use chain."
+    },
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "Detach and close must race ahead of the later lookup-side use."
+    },
+    {
       "after": "use",
       "before": "free",
       "reason": "Use-after-free requires free to occur before use."
     }
   ],
-  "candidate_id": "cand_fixture_bpf_0001",
+  "candidate_id": "cand_ddfd5e8d2ec2d689",
   "debug": {
     "check_result": "sat",
     "encoded_event_count": 6,
@@ -18,19 +33,24 @@
       "use",
       "cleanup"
     ],
-    "input_mapping_confidence": "fixture",
-    "soft_constraints": [],
+    "input_mapping_confidence": "manual",
+    "soft_constraints": [
+      "prefer_split_threads: free/use on different threads when feasible"
+    ],
     "solver": "z3.Optimize",
-    "solver_model_available": true
+    "unsat_reasons": []
   },
   "execution_hints": {
+    "candidate_flow": "Con",
     "entry_selection": {
-      "entry_func": "sys_bpf",
+      "entry_func": "__sys_bpf",
       "entry_kind": "bpf_cmd",
-      "template_id": "bpf_map_prog_lifecycle:bpf_cmd:arm64-vm:v1"
+      "template_id": "__sys_bpf:bpf_cmd:bpf-arm64:v1"
     },
+    "min_threads": 2,
     "notes": [
-      "Fixture plan: uses the single bpf syscall template."
+      "Structural witness only: ordering, thread assignment, and readiness predicates are encoded.",
+      "Exact syscall argument synthesis remains intentionally out of scope for v1."
     ]
   },
   "ordered_steps": [
@@ -43,9 +63,40 @@
       "event": "use",
       "step_index": 1,
       "timestamp": 1
+    },
+    {
+      "event": "escape",
+      "step_index": 2,
+      "timestamp": 2
+    },
+    {
+      "event": "cleanup",
+      "step_index": 3,
+      "timestamp": 3
+    },
+    {
+      "event": "fetch",
+      "step_index": 4,
+      "timestamp": 4
+    },
+    {
+      "event": "init_resource",
+      "step_index": 5,
+      "timestamp": 5
     }
   ],
-  "predicates": [],
+  "predicates": [
+    {
+      "must_hold_at": "fetch",
+      "name": "bpf_link_attached",
+      "scope": "heuristic"
+    },
+    {
+      "must_hold_at": "escape",
+      "name": "bpf_map_ready",
+      "scope": "heuristic"
+    }
+  ],
   "sat": true,
   "schema_version": "witness_plan/v1",
   "status": "sat",
@@ -56,6 +107,26 @@
           "event": "free",
           "step_index": 0,
           "timestamp": 0
+        },
+        {
+          "event": "escape",
+          "step_index": 2,
+          "timestamp": 2
+        },
+        {
+          "event": "cleanup",
+          "step_index": 3,
+          "timestamp": 3
+        },
+        {
+          "event": "fetch",
+          "step_index": 4,
+          "timestamp": 4
+        },
+        {
+          "event": "init_resource",
+          "step_index": 5,
+          "timestamp": 5
         }
       ],
       "thread_id": 0
@@ -72,4 +143,3 @@
     }
   ]
 }
-

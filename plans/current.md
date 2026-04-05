@@ -2,167 +2,157 @@
 
 ## Goal
 
-v1 `backend/syz-guided/` backend is complete, MOCK migration is done, and the
-environment-limited live validation pass has been executed. The remaining work is
-the live arm64 KVM campaign, which requires a dedicated Linux KVM environment.
+Pivot Madelin from a narrow arm64-KVM-only validation slice into an artifact-driven,
+hardware-light arm64 kernel validation workflow centered on **target packs** while
+preserving the static-to-dynamic contract:
 
-## Scope
+`uafx -> bridge export/import -> candidate.json -> witness_plan.json -> backend/syz-guided -> triage_report_v1.json`
 
-- Linux arm64 KVM only
-- syzkaller-based execution via stock syzkaller
-- KASAN/KCOV-backed feedback
-- sequential cross-entry candidates with simple hard-order constraints
-- candidate-aware crash triage
+## Active scope
 
-## v1 backend phases (DONE)
+- Linux arm64 target packs: `kvm`, `io_uring`, `net`, `bpf`, `fs`
+- UAFX-first producer flow: raw warning -> bridge export -> normalized candidate
+- Deterministic witness planning and explicit unsupported cases
+- Hardware-light dry-run validation on ordinary VM-capable environments
+- Legacy KVM support preserved as the initial pack
 
-### Phase 0 — discovery and planning
-- [x] Read all context, agents, plans, skills
-- [x] Map existing bridge codepaths
-- [x] Identify producer/consumer boundaries
-- [x] Document exact candidate.json and witness_plan.json schemas
-- [x] Write implementation plan
-- [x] Write schema-impact analysis
+## Completed phases
 
-### Phase 1 — schemas and fixtures
-- [x] Create backend/syz-guided/ directory structure
-- [x] Write JSON schemas: state_model_v1, target_profile, relation_graph_v1, triage_report_v1
-- [x] Create test fixtures from real bridge artifacts
-- [x] Add schema validation helpers
+### Phase 0 — context engineering and repo orchestration
+- [x] Update planning artifacts around the producer-first target-pack pivot
+- [x] Use repo-local orchestration guidance (`AGENTS.md`, `CLAUDE.md`, `docs/ai/*`, `context/*`)
+- [x] Preserve schema-impact tracking before code changes
 
-### Phase 2 — state model builder and seed synthesis
-- [x] build_state_model.py: candidate.json + witness_plan.json → state_model_v1.json
-- [x] validate_state_model.py: validate against schema
-- [x] synthesize_seeds.py: state_model → .prog seeds
-- [x] emit_seed_manifest.py: produce seed manifest
-- [x] test_state_model.py (24 tests), test_seedgen.py (9 tests)
+### Phase 1 — UAFX-first target metadata generation
+- [x] Generalize `uafx_fork/tools/export_bridge_candidate.py`
+- [x] Export additive target metadata: `kernel_area`, `subsystem`, `target_family`, `entry_kind_hint`
+- [x] Add raw-warning fixtures for `io_uring`, `net`, `bpf`, `fs`
+- [x] Generate bridge-export fixtures for `io_uring`, `net`, `bpf`, `fs`
+- [x] Stop hardcoding `kvm` in the bridge importer
 
-### Phase 3 — orchestrator and scoring
-- [x] score.py: multi-dimensional scoring
-- [x] queue.py: hot/cold queues with promotion/demotion
-- [x] campaign.py: bounded campaign orchestrator
-- [x] prefix_safe_mutator.py, relation_guard.py
-- [x] syzkaller_runner.py
+### Phase 2 — target-pack bridge generalization
+- [x] Add static pack registry under `targets/{kvm,io_uring,net,bpf,fs}`
+- [x] Extend normalized entry kinds for software-reachable packs
+- [x] Make entry classification and syscall template generation pack-aware
+- [x] Generalize witness planning around pack lifecycle edges
+- [x] Add generic witness emission/validation for non-KVM packs
+- [x] Add generic harness generation for non-KVM packs
+- [x] Preserve KVM-specific witness/harness behavior
 
-### Phase 4 — triage and repro
-- [x] parse_kasan.py: KASAN report parser
-- [x] match_candidate.py: crash → candidate matching
-- [x] report.py: triage_report_v1.json emitter
-- [x] candidate_repro.py: prefix-preserving repro wrapper
+### Phase 3 — backend pack generalization
+- [x] Make state-model build pack-aware from manifests
+- [x] Make seed synthesis pack-aware from manifests
+- [x] Keep campaign + triage contracts unchanged
+- [x] Regenerate backend pack fixtures from bridge-produced artifacts
+- [x] Add backend dry-run proofs that extend through campaign summary and triage report
 
-### Phase 5 — narrow validation
-- [x] smoke_seedgen.sh (PASS)
-- [x] smoke_campaign.sh (PASS — 10 iterations, best score 0.591)
-- [x] smoke_triage.sh (PASS — verdict: plausible, score 1.00)
-- [x] 54 unit tests pass
-- [x] Validation evidence recorded in plans/validation-report.md
+### Phase 4 — docs, operator flow, and AI scaffolding
+- [x] Rewrite public scope docs around hardware-light arm64 target packs
+- [x] Update AI/operator docs for safe target-pack extension
+- [x] Add new skills for target-pack design, witness-plan discipline, fixture generation, smoke authoring, triage extension
+- [x] Replace stale root `mock/`-based smokes with local pack-aware smokes
 
-## Migration phase (DONE)
+### Phase 5 — validation
+- [x] Full `uaf-bridge` pytest suite passes (`76` tests)
+- [x] Full `backend/syz-guided` unittest suite passes (`88` tests)
+- [x] Existing backend smokes pass (`smoke_seedgen`, `smoke_campaign`, `smoke_triage`, `smoke_vm_validator`)
+- [x] `backend/syz-guided/scripts/smoke_pack.sh --pack {kvm,io_uring,net,bpf,fs}` passes
+- [x] `scripts/e2e_target_pack_smoke.sh --pack {kvm,io_uring,net,bpf,fs}` passes
+- [x] Validation evidence recorded in `plans/validation-report.md`
 
-- [x] Remove mock/ directory
-- [x] Create plans/mock-removal-audit.md
-- [x] Create plans/syzkaller-runtime-proof.md
-- [x] Update README.md (removed MOCK steps/sections)
-- [x] Update context/current-status.md (removed false "mock intact" claim)
-- [x] Update context/known-issues.md (updated risks)
-- [x] Update plans/repo-map.md (removed dead mock section)
-- [x] Update CLAUDE.md (removed mock-handoff-maintainer skill)
-- [x] Update plans/validation-report.md (added re-run evidence)
+### Phase 6 — io_uring real-runtime validation lane
 
-## Live validation pass (DONE — environment-limited)
+**Goal**: Make `io_uring` the first non-KVM pack with a credible real-runtime validation
+path, evidence artifacts, and subsystem-aware triage — runnable on ordinary arm64 Linux VMs.
 
-- [x] Identified host as macOS 26.3.1 (Darwin arm64) — no Linux KVM
-- [x] Built syz-manager (linux/arm64, 72M ELF) from in-repo syzkaller/ source
-- [x] Built syz-manager (darwin/arm64, 76M) from in-repo syzkaller/ source
-- [x] Built syz-execprog (linux/arm64, 52M ELF) from in-repo syzkaller/ source
-- [x] Confirmed syzkaller/ is clean upstream at aeea1c723 (no patches needed to build)
-- [x] Confirmed overlay image backing file is missing (/home/charles/kvm-fuzz/images/arm64.img)
-- [x] Regenerated state_model_v1.json, target_profile.json, relation_graph_v1.json for fixture
-- [x] Synthesized 4 seeds, all with correct bootstrap prefix in prog text
-- [x] Generated syz-manager config via backend generate_syz_config()
-- [x] Confirmed no SYZ_DIR fallback to system PATH
-- [x] Confirmed naming boundary: seeds use $kvm (syzkaller format), state model uses $KVM (internal)
-- [x] Campaign smoke re-run: 10 iterations, best=0.591 PASS
-- [x] Triage smoke re-run: verdict=plausible, score=1.00 PASS
-- [x] Updated validation-report.md with exact evidence
+**Audit findings** (2026-04-02):
+- Runtime lane exists: `backend/syz-guided/runtime/io_uring_lane.py` (385 lines)
+- Verdict classifier exists: `backend/syz-guided/triage/io_uring_verdict.py` (6 classes)
+- Campaign shell script exists: `backend/syz-guided/scripts/run_io_uring_vm_campaign.sh` (8-step pipeline)
+- Evidence artifacts already emitted: execution_trace_summary, preserved_prefix_report,
+  edge_coverage_summary, concurrency_window_report, candidate_alignment_report, runtime_verdict
+- Existing tests: 2 lane tests, 3 verdict tests, 1 pack fixture dry-run
+- Gap: triage is generic (no io_uring symbol tables beyond candidate focus frames)
+- Gap: only 3 of 6 verdict classes tested
+- Gap: no documented end-to-end proof
+- Gap: manifest maturity still "scaffolded"
+- Gap: AI scaffolding not updated for runtime lane
 
-## Next: vm_validator — disposable QEMU TCG validator on Mac
+**Steps**:
+- [x] Audit all io_uring components across the repo
+- [x] Add `triage/io_uring_symbols.py` — subsystem-specific symbol tables for enhanced matching
+- [x] Add comprehensive tests: all 6 verdict classes, prefix preservation, symbol-enriched triage
+- [x] Update manifest maturity and add `enable_syscalls` for syz-manager config generation
+- [x] Create `plans/io_uring-runtime-proof.md` — documented dry-run proof of full artifact chain
+- [x] Update AI scaffolding: context/, AGENTS.md, skills, docs/ai/OPENCLAW-RUNBOOK.md
+- [x] Run all tests/smokes and record validation evidence (121 tests pass, all smokes pass)
 
-See `plans/vm-validator-phase0.md` for the full Phase 0 design.
+**Constraints**:
+- No schema version changes
+- No KVM regressions
+- Keep the smallest safe diff
+- Do not claim live execution validation without evidence
 
-Goal: run one `.prog` inside a real arm64 Linux kernel under QEMU TCG on macOS,
-collect dmesg/crash output, feed it to the existing triage pipeline. No syz-manager,
-no long campaign, no mutation. One-shot: boot → inject → run → capture → triage → exit.
+### Phase 7 — net (nf_tables) live-validation lane hardening
 
-### Phase 0 — discovery and design (DONE)
-- [x] Read all backend implementation entrypoints
-- [x] Map artifact inputs: candidate.json, witness_plan.json (read-only from bridge)
-- [x] Map runtime inputs: state_model_v1.json, target_profile.json, seed_*.prog
-- [x] Map operator-provided inputs: kernel Image, disk image, SSH key, syz-execprog
-- [x] Verified triage integration point: `build_triage_report(crash_text, tp, sm, calls)`
-- [x] Verified seed format: text `.prog` from synthesize_seeds.py
-- [x] Confirmed schema impact: none — pure consumer, no new schemas
-- [x] Confirmed no changes to bridge artifacts or existing backend modules
-- [x] Identified environment blockers vs code gaps
-- [x] Identified risk: syz-execprog text vs binary prog format (needs verification)
-- [x] Identified risk: guest /dev/kvm depends on CONFIG_KVM=y in guest kernel
-- [x] Identified risk: no standalone arm64 disk image exists yet
-- [x] Wrote plans/vm-validator-phase0.md
-- [x] Updated plans/current.md, plans/repo-map.md, plans/schema-impact.md
+**Goal**: Force the arm64 QEMU nf_tables path across the line into a usable live lane with
+strict preflight, staged execution, layered verdicting, repro artifacts, and known-bug hygiene.
 
-### Phase 1 — implement vm_validator modules, tests, smoke (DONE)
-- [x] `vm_validator/__init__.py` — package marker
-- [x] `vm_validator/preflight.py` — check QEMU, kernel, disk, syz-execprog, SSH key (82 lines)
-- [x] `vm_validator/vm_runner.py` — boot QEMU TCG, SSH wait, shutdown (167 lines)
-- [x] `vm_validator/prog_injector.py` — scp + ssh execute syz-execprog (130 lines)
-- [x] `vm_validator/log_collector.py` — pull dmesg, extract KASAN section (96 lines)
-- [x] `vm_validator/run_one.py` — top-level orchestrator with triage hook (186 lines)
-- [x] `scripts/smoke_vm_validator.sh` — preflight-only smoke (PASS)
-- [x] `tests/test_vm_validator.py` — 30 unit tests (PASS)
-- [x] All 24 existing state_model tests still pass
-- [x] Updated plans/current.md, plans/validation-report.md
+**Completed in this pass**:
+- [x] Replace the old host-style net runtime lane with a guest-backed arm64 QEMU path
+- [x] Make `run_net_vm_campaign.sh` require kernel, disk image, and SSH key inputs
+- [x] Enforce strict live preflight before any seed execution
+- [x] Stage execution as single-seed -> four-seed -> short bounded campaign -> optional extended
+- [x] Emit timestamped `out/net-runtime/live-YYYYMMDD-HHMMSS/` artifact trees
+- [x] Split verdicting into execution / crash / candidate evidence layers
+- [x] Add crash repro reruns, reproducibility classification, and minimization handoff artifacts
+- [x] Add manual known-bug review artifacts and duplicate-hygiene gating before novelty claims
+- [x] Add targeted tests for helpers, verdicts, repro behavior, layout, and failure classes
+- [x] Update operator and AI scaffolding to match the live path
 
-### Phase 2 — environment prerequisites (DONE)
-- [x] Create standalone arm64 rootfs (arm64-standalone.qcow2, 11.5 GiB)
-- [x] Fix fstab (removed stale BOOT/UEFI entries, root → /dev/vda1)
-- [x] Verify guest kernel has CONFIG_KVM=y (yes, but /dev/kvm absent under TCG)
-- [x] Verify syz-execprog accepts text `.prog` format (confirmed: parses directly)
-- [x] Build syz-execprog via Makefile with syscall descriptions (46M, linux/arm64)
-- [x] Build syz-executor inside guest from source (4.1M, linux/arm64)
-- [x] Full boot smoke: QEMU TCG → systemd → SSH ready in ~5 min
+**Follow-on guest-enablement work completed after hardening**:
+- [x] Diagnose the old SSH banner timeout as a guest-readiness problem rather than a key problem
+- [x] Add banner-and-command-based readiness detection instead of raw TCP-port readiness
+- [x] Make guest-resident `syz-execprog` and `syz-executor` usable in the lane
+- [x] Add `stage_arm64_guest_tooling.sh` to export validated linux/arm64 guest binaries back to the host
+- [x] Create and use `syzkaller-runtime-export/arm64-live-ready.qcow2` with `init=/root/madelin-guest-init.sh`
+- [x] Reach real guest-side seed execution start under the replacement image
 
-### Phase 3 — live validation (DONE — TCG-limited)
-- [x] Full boot with VM_KERNEL, VM_DISK, VM_SSH_KEY
-- [x] SCP syz-execprog + syz-executor + seed into guest
-- [x] syz-execprog executed seed_full_run.prog (connected to executor, syscalls ran)
-- [x] KVM ioctls returned EINVAL (no /dev/kvm under TCG — expected)
-- [x] Collected 348-line dmesg, no KASAN crash (correct for EINVAL path)
-- [x] Triage pipeline: verdict=insufficient_data, score=0.0 (correct)
-- [x] Updated validation-report.md with full live execution evidence
+**Current blocker after guest readiness**:
+- [ ] Tune or classify the first bounded guest-side seed run, which can exceed the current per-seed timeout under TCG
 
-### What remains for full syz-manager campaign
+### Phase 8 — lab-only net bug lab scaffolding
 
-See `plans/linux-kvm-runbook.md` for the concrete execution plan.
+**Goal**: Keep the existing `net` runtime lane strict, but expose it as a reproducible **lab-only**
+workflow for synthetic or already-disclosed net bugs with deterministic artifacts, exact blocker
+reports, and bounded AI-assisted ranking inputs.
 
-Required on a Linux arm64 KVM host:
+**Implementation constraints**:
+- [ ] Preserve the artifact boundary: `warning -> candidate.json -> witness_plan.json -> backend artifacts -> runtime -> triage`
+- [ ] Keep runtime proof gated on real execution evidence only
+- [ ] Keep AI ranking/triage advisory only; never let it count as proof
+- [ ] Add only additive artifacts and helper scripts; do not widen support claims
+- [ ] Reuse the current `net` runtime lane and proof-mode kernel flow instead of introducing a new framework
 
-1. Verify `/dev/kvm` on host and in guest.
-2. Build syzkaller natively (syz-manager, syz-execprog, syz-executor via CGO).
-3. One-shot seed execution under QEMU/KVM (section 5 of runbook).
-4. Bounded syz-manager campaign in isolated mode (section 6 of runbook).
-5. Triage any crashes via candidate-aware pipeline.
-6. Update validation-report.md with evidence.
+**Planned work**:
+- [ ] Add a first-class lab run bundle with kernel provenance, source-frame summary, and blocker reports
+- [ ] Add a lab overlay classifier that maps existing verdicts into lab-only states without changing the existing verdict schema
+- [ ] Add deterministic local ranking helpers for net files and seeds plus ranking decision artifacts
+- [ ] Add a dedicated lab-only synthetic net bug target description under `targets/net/`
+- [ ] Make minimized-seed handoff and exact source-frame evidence first-class lab artifacts
+- [ ] Update docs/status/validation notes to keep the support boundary explicit
 
-## Done criteria (met for software validation)
+**Will not claim after this phase**:
+- [ ] No broader net subsystem support than the validated lab pack and current staged live lane
+- [ ] No real-world novelty, exploitability, or CVE implication
+- [ ] No proof beyond synthetic/disclosed lab targets with saved runtime evidence
 
-- [x] backend/syz-guided/ exists with all v1 modules
-- [x] Schemas validate
-- [x] State model generation is deterministic for the KVM fixture
-- [x] Seeds parse and preserve prefix constraints
-- [x] Triage emits structured reports matching focus frames
-- [x] Validation evidence recorded
-- [x] MOCK removed; syzkaller is canonical runtime
-- [x] Syzkaller runtime proof documented
-- [x] syzkaller builds successfully from in-repo source
-- [x] vm_validator one-shot execution on macOS (DONE — TCG-limited, no /dev/kvm)
-- [ ] Live arm64 KVM campaign (blocked: requires Linux KVM host)
+
+## Remaining gaps
+
+- Real KVM-triggered crash validation still requires a Linux arm64 KVM host.
+- `fs` currently validates the mount-API family end to end; FUSE remains scaffolded, not separately proven.
+- `ublk` is still the recommended next pack and has not been implemented.
+- Generic witness/harness generation is intentionally contract-first and does not claim semantic argument synthesis beyond the emitted fixtures.
+- `io_uring` real-runtime lane is implemented and dry-run proven; live execution on a real arm64 Linux VM remains the next validation step.
+- `net` (nf_tables) live lane is implemented and strict-preflight-gated; remaining work is environment-backed execution evidence on a prepared arm64 guest image.

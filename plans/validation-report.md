@@ -2,6 +2,198 @@
 
 ## What was validated
 
+## Lab-only net scaffolding pass — 2026-04-04
+
+### What changed
+
+- Added additive lab-only reporting on top of the existing guest-backed `net` lane:
+  - `runtime/kernel_provenance.json`
+  - `runtime/source_frame_summary.json`
+  - `runtime/blocker_report.json`
+  - `runtime/lab_state.json`
+  - `runtime/lab_run_bundle.json`
+- Added deterministic local ranking helpers:
+  - `backend/syz-guided/scripts/rank_net_files.py`
+  - `backend/syz-guided/scripts/rank_net_seeds.py`
+- Added explicit lab-only target metadata:
+  - `targets/net/lab/manifest.json`
+  - `targets/net/lab/README.md`
+  - `plans/net-lab-targets.md`
+
+### What was validated
+
+- Python syntax for the new/changed runtime, triage, and ranking helper files
+- Unit tests for:
+  - lab bundle emission helpers
+  - blocker report generation
+  - source-frame summary generation
+  - deterministic file/seed ranking
+  - lab-state mapping
+  - runtime-lane emission of additive lab artifacts on success and blocker paths
+- Shell syntax for `backend/syz-guided/scripts/run_net_vm_campaign.sh`
+
+### What this pass proves
+
+- The repo now has a bounded, reviewable **lab-only** net workflow layer on top of the existing runtime lane.
+- The runtime lane can emit deterministic lab artifacts and exact blocker reports without changing the underlying `candidate.json` / `witness_plan.json` contracts.
+- The lab layer is additive only and keeps proof gated on real runtime evidence.
+
+### What this pass does not prove
+
+- A broad net bug discovery capability
+- Novelty detection
+- CVE discovery
+- Live confirmation of the synthetic lab target on the current guest image
+
+## Net proof-mode progress run — 2026-04-04
+
+### What changed
+
+- Added milestone-based progress reporting to the net live operator flow:
+  - `backend/syz-guided/runtime/net_lane.py` now writes `logs/progress.json`
+  - `backend/syz-guided/scripts/run_net_vm_campaign.sh` now renders that progress during the runtime step
+
+### What was validated
+
+- Python syntax for the changed runtime file
+- shell syntax for the changed operator script
+- a real operator invocation of:
+  - `run_net_vm_campaign.sh --proof-mode controlled ... --out-dir out/net-runtime/live-net-proof-with-progress`
+
+### What happened
+
+- The progress renderer correctly reported the first failing stage:
+  - `1/4 preflight | summary | status=failed | detail=environment/setup failure`
+- The run did not reach boot console capture, SSH readiness, guest inspection, or seed execution.
+- The exact blocker is recorded in:
+  - `out/net-runtime/live-net-proof-with-progress/preflight/preflight_summary.json`
+  - `out/net-runtime/live-net-proof-with-progress/runtime/blocker_report.json`
+
+### Exact blocker
+
+QEMU failed before guest boot because the disk image chain is incomplete:
+
+```text
+Could not open '/Users/CJ/Desktop/Kernel-stuff/madelin/syzkaller-runtime-export/arm64.img': No such file or directory
+```
+
+This means:
+- the proof kernel path is not the current blocker
+- the proof lane cannot proceed until `/tmp/madelin-nft-debug2.qcow2` is replaced with or repaired into a self-contained bootable image
+
+### Outcome
+
+- Final verdict:
+  - `environment/setup failure`
+- No runtime proof, seed execution, crash evidence, repro artifacts, or boot console were produced in this run.
+
+## Net nftables guest/runtime integration pass — 2026-04-03 (latest)
+
+### What changed
+
+- Removed dependency on the old missing custom-init path from the live defaults.
+- Repaired a working TCG guest overlay path so the new nftables-enabled kernel can boot far enough for automation:
+  - persistent SSH host keys
+  - persistent root authorized_keys
+  - early `madelin-live-ssh.service` with static slirp networking and direct `sshd`
+- Hardened live preflight reporting:
+  - incremental `preflight_progress.json`
+  - faster targeted kernel-config and coverfile probes
+  - built-in netfilter feature handling
+  - wider SSH readiness command budget under TCG
+
+### What was proven live
+
+- The new kernel boots under arm64 QEMU TCG:
+  - `syzkaller-runtime-export/kernel-export/nftables-enabled-Image`
+- The repaired overlay starts an SSH daemon early enough for automation:
+  - boot console shows `Server listening on 0.0.0.0 port 22`
+  - boot console shows repeated `Accepted publickey for root`
+- The operator path now gets substantially deeper into strict preflight than before:
+  - guest runtime prep passes
+  - guest architecture passes
+  - required kernel config checks pass
+  - preflight progress is artifacted instead of opaque
+
+### Current exact blocker
+
+The live lane still stops before first seed execution. The remaining blocker is no longer guest boot:
+
+- strict preflight still fails on a narrower set of guest command/tooling checks
+- current evidence:
+  - `out/net-runtime/live-single-seed-nftables-overlaytest-6/preflight/preflight_summary.json`
+  - `out/net-runtime/live-single-seed-nftables-overlaytest-6/preflight/preflight_progress.json`
+  - `out/net-runtime/live-single-seed-nftables-overlaytest-6/preflight/boot-console.log`
+
+Observed failures in that run:
+- `ssh_non_interactive`: timeout after 5s
+- `serial_console`: empty response despite a correct boot append
+- `debugfs_path`: timed out/empty response, while `debugfs_mounted` succeeds
+- `nf_tables_exposed`: `NETLINK_NETFILTER` probe still failing
+- `guest_syz_execprog_arch` / `guest_syz_executor_arch`: guest-side tooling not validating as usable arm64 binaries in this overlay path
+- `syz_execprog_coverfile`: still failing
+
+### Outcome
+
+- The lane did not yet reach a trustworthy single-seed runtime classification.
+- Final verdict for the latest live probe remains:
+  - `environment/setup failure`
+- The failure is now specific and evidence-backed, not a generic guest boot/setup failure.
+
+## Net guest-readiness pass — 2026-04-03
+
+### Root cause of the old SSH banner timeout
+
+- The archived `arm64-standalone.qcow2` full Ubuntu boot path under arm64 QEMU TCG was not automation-ready.
+- The forwarded host TCP port could accept a connection before the guest was actually ready to speak usable SSH for the live lane.
+- The issue was guest readiness, not missing keys:
+  - root authorized_keys and host keys were present
+  - the heavy full-system boot path was the unreliable part
+
+### Replacement guest path
+
+- New replacement image: `syzkaller-runtime-export/arm64-live-ready.qcow2`
+- New minimal guest init inside the image: `/root/madelin-guest-init.sh`
+- Required QEMU append for the live lane:
+  - `init=/root/madelin-guest-init.sh`
+
+The minimal guest init:
+- remounts root rw
+- mounts proc/sysfs/devpts/debugfs
+- configures static slirp networking (`10.0.2.15/24`, gateway `10.0.2.2`)
+- starts `sshd`
+- avoids waiting for the full Ubuntu systemd boot stack
+
+### Host/runtime changes validated
+
+- `vm_validator/vm_runner.py` now waits for:
+  - SSH banner
+  - successful non-interactive SSH command
+  - not just a raw TCP accept on port 22
+- Readiness attempts are now recorded in `ssh-readiness-timeline.json`
+- The net lane can now use guest-resident:
+  - `/root/syz-execprog`
+  - `/root/syz-executor`
+- New helper:
+  - `backend/syz-guided/scripts/stage_arm64_guest_tooling.sh`
+- File staging now uses legacy `scp -O` to avoid SFTP hangs in the minimal guest environment
+
+### Real execution evidence
+
+Validated directly in this environment:
+- replacement guest emits a real SSH banner
+- non-interactive SSH command succeeds as `root`
+- guest-side net seed staging starts
+- guest-side `syz-execprog -executor=/root/syz-executor ...` invocation starts
+
+Manual artifacts:
+- `out/net-runtime/manual-live-seed/boot-console.log`
+- `out/net-runtime/manual-live-seed-2/boot-console.log`
+
+Observed next blocker:
+- the first bounded guest-side seed execution can exceed the current per-seed timeout under TCG
+- this is now a `seed execution` blocker, not an `environment/setup failure`
+
 ### Schema validation
 - [x] state_model_v1.schema.json — validates via basic field check (no jsonschema dep)
 - [x] target_profile.schema.json — validates via basic field check
@@ -788,3 +980,262 @@ Phase E1 synchronization pass).
 
 Repo is handoff-ready for Linux KVM execution. No stale references, no overclaims,
 no missing files. All software-side validation is complete and recorded.
+
+---
+
+## UAFX-first target-pack pivot validation (2026-04-02)
+
+### Goal
+
+Prove the producer-first target-pack chain end to end for `kvm`, `io_uring`, `net`, `bpf`, and `fs` without changing artifact schema versions.
+
+### Full test suites
+
+```bash
+cd uaf-bridge
+.venv/bin/python -m pytest -q
+# Result: 76 passed in 8.34s
+
+cd backend/syz-guided
+python3 -m unittest discover -s tests -v
+# Result: 88 tests OK
+```
+
+### Legacy backend smoke regression
+
+```bash
+cd backend/syz-guided
+bash scripts/smoke_seedgen.sh
+bash scripts/smoke_campaign.sh
+bash scripts/smoke_triage.sh
+```
+
+Results:
+- `smoke_seedgen.sh`: PASS
+- `smoke_campaign.sh`: PASS (`10` iterations, best score `0.591`)
+- `smoke_triage.sh`: PASS (`verdict=plausible`, `match_score=1.00`)
+
+### Pack-aware backend smokes
+
+```bash
+cd backend/syz-guided
+for pack in kvm io_uring net bpf fs; do
+  bash scripts/smoke_pack.sh --pack "$pack"
+done
+```
+
+Results:
+- `kvm`: PASS, triage verdict `plausible`
+- `io_uring`: PASS, triage verdict `plausible`
+- `net`: PASS, triage verdict `plausible`
+- `bpf`: PASS, triage verdict `plausible`
+- `fs`: PASS, triage verdict `plausible`
+
+### Root UAFX-first dry-run proofs
+
+```bash
+cd /Users/CJ/Desktop/Kernel-stuff/madelin
+for pack in kvm io_uring net bpf fs; do
+  bash scripts/e2e_target_pack_smoke.sh --pack "$pack"
+done
+```
+
+Observed results:
+- `kvm`: PASS, campaign best `0.591`, triage verdict `plausible`, match score `1.00`
+- `io_uring`: PASS, campaign best `0.549`, triage verdict `plausible`, match score `1.00`
+- `net`: PASS, campaign best `0.750`, triage verdict `plausible`, match score `1.00`
+- `bpf`: PASS, campaign best `0.508`, triage verdict `plausible`, match score `1.00`
+- `fs`: PASS, campaign best `0.508`, triage verdict `plausible`, match score `1.00`
+
+Artifact chain proven for each pack:
+- raw warning
+- bridge export
+- `candidate.json`
+- `witness_plan.json`
+- `witness.syz`
+- `harness.c`
+- `state_model_v1.json`
+- `target_profile.json`
+- `relation_graph_v1.json`
+- `seed_*.prog` + `seed_manifest.json`
+- `campaign_summary.json`
+- `triage_report_v1.json`
+
+### Notes
+
+- `candidate.json` and `witness_plan.json` schema versions remained unchanged.
+- Witness plans are now canonicalized so repeated solves emit deterministic `ordered_steps` and thread assignments.
+- Non-KVM witness/harness generation remains scaffolded and contract-first; these proofs validate artifact flow, not broad semantic coverage claims.
+- The `fs` pack proof covers the mount-API family. FUSE-specific proof remains future work.
+
+## net (nf_tables/netfilter) real-runtime lane validation (2026-04-03)
+
+### Test results
+
+```
+$ python3 -m unittest discover -s backend/syz-guided/tests -v
+...
+Ran 154 tests in 3.8s
+OK
+```
+
+Net-specific tests: 34 total
+- test_net_lane.py: 2 (runtime lane execution + timeout classification)
+- test_net_verdict.py: 9 (all 6 verdict classes + signals + reasons)
+- test_net_seedgen.py: 9 (prefix preservation, variant structure, resource chain)
+- test_net_symbols.py: 13 (symbol tables, enrichment, subsystem classification)
+- test_packs_backend.py (net): 1 (full dry-run proof through campaign + triage)
+
+### Smoke results
+
+```
+$ bash backend/syz-guided/scripts/smoke_pack.sh --pack net
+=== smoke_pack PASSED ===
+
+$ bash scripts/e2e_target_pack_smoke.sh --pack net
+=== e2e_target_pack_smoke PASSED ===
+```
+
+### Non-regression (all other packs)
+
+```
+$ bash backend/syz-guided/scripts/smoke_pack.sh --pack kvm    # PASSED
+$ bash backend/syz-guided/scripts/smoke_pack.sh --pack io_uring # PASSED
+$ bash backend/syz-guided/scripts/smoke_pack.sh --pack bpf    # PASSED
+$ bash backend/syz-guided/scripts/smoke_pack.sh --pack fs     # PASSED
+```
+
+### Net evidence artifacts emitted (dry-run)
+
+- execution_trace_summary.json: 4 seeds executed, 4 crashes, 0 timeouts
+- preserved_prefix_report.json: 4/4 prefix valid (rate=1.00)
+- edge_coverage_summary.json: 4/4 resource chain intact (rate=1.00)
+- concurrency_window_report.json: overlap_window_attempted=true
+- candidate_alignment_report.json: best_match=1.00, subsystem_relevance=net_teardown_use
+- runtime_verdict.json: verdict_class="candidate-correlated crash"
+
+### Networking family rationale
+
+nf_tables chosen over rtnetlink/generic-netlink/packet-socket because:
+1. Software-reachable on any arm64 Linux VM with CONFIG_NF_TABLES=y
+2. Explicit object lifecycle (nft_set create/configure/dump/delete)
+3. Known UAF surface modeled by UAFX candidate fixture
+4. Native syzkaller syscall descriptions available
+5. Concurrency window (delete+dump race) exercisable with threaded syz-execprog
+
+### Files created
+
+- backend/syz-guided/runtime/net_lane.py (~370 lines)
+- backend/syz-guided/triage/net_verdict.py (~85 lines)
+- backend/syz-guided/triage/net_symbols.py (~160 lines)
+- backend/syz-guided/tests/test_net_lane.py
+- backend/syz-guided/tests/test_net_verdict.py
+- backend/syz-guided/tests/test_net_seedgen.py
+- backend/syz-guided/tests/test_net_symbols.py
+- backend/syz-guided/scripts/run_net_vm_campaign.sh
+- plans/net-runtime-proof.md
+
+### Files updated
+
+- targets/net/manifest.json: maturity → runtime-validated(dry-run), added enable_syscalls + runtime_config_hints
+- CLAUDE.md: added net proof reference
+- AGENTS.md: added net to supported scope
+- context/commands.md: added net runtime commands
+- context/current-status.md: added net runtime lane section
+- context/known-issues.md: updated scaffolded pack status
+- plans/current.md: added Phase 7
+- plans/repo-map.md: added net runtime lane section
+- plans/validation-report.md: this section
+- docs/ai/OPENCLAW-RUNBOOK.md: added net campaign section
+
+
+## net (nf_tables/netfilter) live-lane hardening (2026-04-03)
+
+### Scope
+- convert the old net dry-run runtime path into a real arm64 guest-backed lane
+- make preflight strict and unavoidable
+- add staged execution, layered verdicts, repro artifacts, and known-bug hygiene
+
+### Commands run
+```bash
+python3 -m py_compile   backend/syz-guided/runtime/net_lane.py   backend/syz-guided/triage/net_verdict.py   backend/syz-guided/triage/kernel_crash.py   backend/syz-guided/tests/test_net_lane.py   backend/syz-guided/tests/test_net_verdict.py
+
+bash -n backend/syz-guided/scripts/run_net_vm_campaign.sh
+
+python3 -m unittest   backend.syz-guided.tests.test_net_verdict   backend.syz-guided.tests.test_net_lane
+
+python3 -m unittest   backend.syz-guided.tests.test_net_seedgen   backend.syz-guided.tests.test_net_symbols   backend.syz-guided.tests.test_vm_validator   backend.syz-guided.tests.test_packs_backend
+```
+
+### Results
+- Python compile checks passed for the new live-lane modules and tests.
+- Shell syntax check passed for `run_net_vm_campaign.sh`.
+- New targeted tests passed: 11 tests.
+- Adjacent non-regression tests passed: 56 tests.
+- Total checks run in this pass: 67 tests, all passing.
+
+### Behavior now implemented
+- strict host + guest preflight before any live seed execution
+- arm64 ELF checks for `syz-execprog` and `syz-executor`
+- guest verification for SSH, networking, debugfs, kernel config, nf_tables availability, and `-coverfile`
+- staged live execution order: single seed, four seeds, bounded campaign, optional extended rounds
+- timestamped live output directories with `preflight/`, `campaign/`, `runtime/`, `crashes/`, `repro/`, `logs/`
+- per-seed exact artifacts: `.prog`, stdout, stderr, dmesg, layered evidence, triage report, verdict
+- final verdict classes aligned with the real-crash bar and manual known-bug review status
+- repro rerun loop with reproducibility rate and minimization handoff artifact
+- manual novelty/duplicate hygiene artifact emitted before novelty is implied
+
+### Environment-backed execution status
+- No real arm64 guest run was completed in this development environment during this pass.
+- The remaining blocker is operator-supplied guest inputs: bootable arm64 kernel image, bootable disk image, SSH key, and linux/arm64 syzkaller binaries matching the guest.
+- Because no real guest run completed here, there is no claim of a live nf_tables crash, reproduced crash, or validated bug candidate from this pass alone.
+
+
+### Live attempt in this environment
+
+Commands:
+- `python3 - <<'PY' ... run_live_preflight(...) ... PY`
+- `bash backend/syz-guided/scripts/run_net_vm_campaign.sh --syz-execprog syzkaller/bin/linux_arm64/syz-execprog --syz-executor syzkaller/bin/linux_arm64/syz-execprog --kernel syzkaller-runtime-export/Image --disk-image syzkaller-runtime-export/arm64-standalone.qcow2 --ssh-key out/net-runtime/live-preflight-probe/id_rsa --out-dir out/net-runtime/live-script-probe --threaded --procs 2 --timeout-sec 30`
+
+Observed result:
+- `out/net-runtime/live-preflight-probe-2/preflight/preflight_summary.json`: `ready=false`
+- `out/net-runtime/live-script-probe/runtime/final_verdict.json`: `verdict_class="environment/setup failure"`
+- `out/net-runtime/live-script-probe/preflight/preflight_summary.json` records the blocking checks.
+
+Concrete blockers from the archived guest assets:
+- forwarded SSH accepts a TCP connection but non-interactive SSH times out during banner exchange
+- guest cmdline/config/debugfs/nf_tables checks cannot complete because guest inspection never becomes reliable
+- there is still no checked-in linux/arm64 `syz-executor`; host-side darwin build cannot produce it
+
+### net single-seed TCG push (2026-04-03, latest pass)
+
+Scope:
+- make the replacement image the operator default
+- add single-seed-only stage selection
+- add explicit seed timeout/stall classifications and artifacts
+- rerun the live path until the next blocker is precise
+
+Commands run:
+```bash
+python3 -m py_compile backend/syz-guided/runtime/net_lane.py backend/syz-guided/tests/test_net_lane.py
+python3 -m unittest backend.syz-guided.tests.test_net_lane backend.syz-guided.tests.test_vm_validator
+bash -n backend/syz-guided/scripts/run_net_vm_campaign.sh
+bash backend/syz-guided/scripts/run_net_vm_campaign.sh --kernel syzkaller-runtime-export/Image --ssh-key out/net-runtime/live-preflight-probe/id_rsa --single-seed-only --out-dir out/net-runtime/live-single-seed-operator
+bash backend/syz-guided/scripts/run_net_vm_campaign.sh --kernel syzkaller-runtime-export/Image --ssh-key out/net-runtime/live-preflight-probe/id_rsa --single-seed-only --out-dir out/net-runtime/live-single-seed-operator-2
+bash backend/syz-guided/scripts/run_net_vm_campaign.sh --kernel syzkaller-runtime-export/Image --ssh-key out/net-runtime/live-preflight-probe/id_rsa --single-seed-only --out-dir out/net-runtime/live-single-seed-operator-3
+```
+
+Results:
+- Added default replacement-image selection in `run_net_vm_campaign.sh`.
+- Added `--single-seed-only` and stage truncation via `--stop-after-stage single-seed-validation`.
+- Added machine-readable `seed_execution_status.json` and runtime single-seed summaries.
+- Fixed guest SSH command transport so preflight no longer produced false negatives for guest cmdline/debugfs/network state.
+- Latest live attempt still did not reach a seed result because strict preflight correctly failed on target support:
+  - `CONFIG_NF_TABLES` missing from the running kernel config
+  - `nfnetlink` and `nf_tables` unavailable in the guest
+  - `nf_tables_exposed=false`
+- Latest evidence: `out/net-runtime/live-single-seed-operator-3/preflight/preflight_summary.json` and `out/net-runtime/live-single-seed-operator-3/runtime/final_verdict.json`.
+
+Conclusion:
+- The next blocker is now proven and concrete: replace `syzkaller-runtime-export/Image` with an arm64 kernel that actually enables `nf_tables`/`nfnetlink`.
+- Until that kernel exists, the net live lane cannot honestly classify a single-seed runtime result for `nf_tables`.

@@ -23,6 +23,26 @@
     "kvm_device_ioctl": {
       "entry_kind": "file_ioctl",
       "notes": "Curated KVM/arm64 device-fd ioctl entry for device-attribute style paths."
+    },
+    "__do_sys_io_uring_enter": {
+      "entry_kind": "io_uring_enter",
+      "notes": "Curated io_uring entry covering setup/register/enter/teardown flows."
+    },
+    "nfnetlink_rcv_batch": {
+      "entry_kind": "netlink_send",
+      "notes": "Curated netfilter netlink entry covering nft batch create/update/delete flows."
+    },
+    "__sys_bpf": {
+      "entry_kind": "bpf_cmd",
+      "notes": "Curated eBPF command entry covering map/program/link lifetimes."
+    },
+    "vfs_get_tree": {
+      "entry_kind": "mount_api_step",
+      "notes": "Curated mount API entry covering fsopen/fsconfig/fsmount/move_mount teardown flows."
+    },
+    "fuse_dev_do_read": {
+      "entry_kind": "fuse_control",
+      "notes": "Curated FUSE control entry for connection teardown/use scaffolds."
     }
   }
 }

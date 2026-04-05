@@ -18,6 +18,7 @@ from extractor.normalize_candidate import (
     load_manual_map,
     normalize_location,
 )
+from mapping.target_registry import target_context
 
 
 def _build_candidate_id(export_payload: dict[str, Any]) -> str:
@@ -31,9 +32,9 @@ def _normalize_flow(export_payload: dict[str, Any]) -> str:
     return flow if isinstance(flow, str) and flow in {"Seq", "Con", "Unknown"} else "Unknown"
 
 
-def _entry_funcs_from_export(export_payload: dict[str, Any]) -> list[str]:
+def _entry_candidates_from_export(export_payload: dict[str, Any]) -> list[dict[str, Any]]:
     entry_summary = export_payload.get("entry_summary")
-    funcs: list[str] = []
+    candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
     if isinstance(entry_summary, dict):
         raw_candidates = entry_summary.get("entry_candidates", [])
@@ -42,16 +43,23 @@ def _entry_funcs_from_export(export_payload: dict[str, Any]) -> list[str]:
                 if not isinstance(candidate, dict):
                     continue
                 entry_func = candidate.get("entry_func")
-                if isinstance(entry_func, str) and entry_func not in seen:
-                    seen.add(entry_func)
-                    funcs.append(entry_func)
+                if not isinstance(entry_func, str) or entry_func in seen:
+                    continue
+                seen.add(entry_func)
+                candidates.append(
+                    {
+                        "confidence": candidate.get("confidence") if isinstance(candidate.get("confidence"), str) else "unknown",
+                        "entry_func": entry_func,
+                        "entry_kind_hint": candidate.get("entry_kind_hint") if isinstance(candidate.get("entry_kind_hint"), str) else None,
+                    }
+                )
         raw_top_entries = entry_summary.get("top_entries", [])
         if isinstance(raw_top_entries, list):
             for entry_func in raw_top_entries:
                 if isinstance(entry_func, str) and entry_func not in seen:
                     seen.add(entry_func)
-                    funcs.append(entry_func)
-    return funcs
+                    candidates.append({"confidence": "heuristic", "entry_func": entry_func, "entry_kind_hint": None})
+    return candidates
 
 
 def _heuristic_predicates(export_payload: dict[str, Any]) -> list[str]:
@@ -72,13 +80,25 @@ def _heuristic_predicates(export_payload: dict[str, Any]) -> list[str]:
     return sorted(names)
 
 
+def _analysis_context_from_export(export_payload: dict[str, Any]) -> dict[str, str]:
+    raw_warning = export_payload.get("raw_warning") if isinstance(export_payload.get("raw_warning"), dict) else {}
+    return target_context(
+        kernel_area=export_payload.get("kernel_area") if isinstance(export_payload.get("kernel_area"), str) else None,
+        subsystem=export_payload.get("subsystem") if isinstance(export_payload.get("subsystem"), str) else raw_warning.get("subsystem") if isinstance(raw_warning.get("subsystem"), str) else None,
+        target_family=export_payload.get("target_family") if isinstance(export_payload.get("target_family"), str) else None,
+        arch=export_payload.get("arch") if isinstance(export_payload.get("arch"), str) else raw_warning.get("arch") if isinstance(raw_warning.get("arch"), str) else None,
+        default_pack="kvm",
+    )
+
+
 def import_uafx_bridge_export(export_payload: dict[str, Any], raw_file: str | None = None) -> dict[str, Any]:
     loc0 = normalize_location(export_payload.get("loc0"))
     loc1 = normalize_location(export_payload.get("loc1"))
     flow = _normalize_flow(export_payload)
     manual_map = load_manual_map()
-    entry_funcs = _entry_funcs_from_export(export_payload)
-    entries, entry_summary = build_entries(entry_funcs, manual_map)
+    analysis_context = _analysis_context_from_export(export_payload)
+    entry_candidates = _entry_candidates_from_export(export_payload)
+    entries, entry_summary = build_entries(entry_candidates, manual_map, analysis_context=analysis_context)
 
     constraint_summary = export_payload.get("constraint_summary") if isinstance(export_payload.get("constraint_summary"), dict) else {}
     synthesized_warning = {
@@ -108,12 +128,7 @@ def import_uafx_bridge_export(export_payload: dict[str, Any], raw_file: str | No
     ]
     heuristic_predicates = _heuristic_predicates(export_payload)
     candidate = {
-        "analysis_context": {
-            "arch": "arm64",
-            "kernel_area": export_payload.get("kernel_area") if isinstance(export_payload.get("kernel_area"), str) else "arch/arm64/kvm",
-            "subsystem": "kvm",
-            "target_family": "kvm-arm64-narrow",
-        },
+        "analysis_context": analysis_context,
         "candidate_id": _build_candidate_id(export_payload),
         "constraints": constraints,
         "entries": entries,

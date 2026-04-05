@@ -10,7 +10,7 @@ description: Run the narrowest correct preflight and smoke validation for the ta
 - preflights need to be run
 - witness or harness smoke is needed
 - remote target checks are relevant
-- a task touches arm64 KVM mapping, witness emission, or seed preparation
+- a task touches target-pack mapping, witness emission, harness emission, or seed preparation
 
 ## Read first
 - `context/commands.md`
@@ -35,4 +35,3 @@ description: Run the narrowest correct preflight and smoke validation for the ta
 - do not claim broader coverage than was actually run
 - distinguish correctness evidence from non-regression evidence
 - surface environment blockers explicitly
-

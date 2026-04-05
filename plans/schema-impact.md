@@ -1,81 +1,61 @@
 # Schema impact
 
-## Preserved contracts (no changes)
+## Preserved contracts
 
-- `candidate.json` (candidate/v1): consumed read-only by state model builder
-- `witness_plan.json` (witness_plan/v1): consumed read-only by state model builder
-- `mock_seed.json` (mock_seed/v1): not touched by backend
+No schema version changed in this pivot.
 
-## New runtime artifacts
+- `candidate.json` remains `candidate/v1`
+- `witness_plan.json` remains `witness_plan/v1`
+- `state_model_v1.json` remains `state_model/v1`
+- `target_profile.json` remains `target_profile/v1`
+- `relation_graph_v1.json` remains `relation_graph/v1`
+- `triage_report_v1.json` remains `triage_report/v1`
 
-### state_model_v1.json
-Schema version: `state_model/v1`
-Producer: `backend/syz-guided/state_model/build_state_model.py`
-Consumers: seed synthesizer, orchestrator, mutator, triage
+## Additive producer-side changes
 
-Contains:
-- candidate_id, schema_version
-- subsystem, arch, target_family
-- source_artifacts (candidate path, witness plan path)
-- loc0, loc1 (free/use site metadata)
-- resource_chain (ordered resource dependencies with types)
-- phases (bootstrap, configure, trigger — each with syscalls)
-- precedence_edges (hard ordering from barriers)
-- sticky_calls (calls that must not be removed)
-- immutable_prefix_len (length of bootstrap prefix to protect)
-- favored_suffix_calls (calls likely to trigger free/use)
-- score_weights (prefix_valid, resource_chain, phase_progress, target_signal, order_preserved)
+The UAFX bridge-export payload now carries additive target metadata so the importer can
+preserve pack selection deterministically:
 
-### target_profile.json
-Schema version: `target_profile/v1`
-Producer: `backend/syz-guided/state_model/build_state_model.py`
-Consumers: orchestrator scoring, triage matching
+- `arch`
+- `kernel_area`
+- `subsystem`
+- `target_family`
+- `entry_summary.entry_candidates[*].entry_kind_hint`
 
-Contains:
-- candidate_id, schema_version
-- focus_frames (functions near free/use sites)
-- focus_files (source files near free/use sites)
-- free_use_hints (function, file, line for loc0/loc1)
-- preferred_syscalls (from template calls)
-- candidate_signal_rules (KASAN UAF match conditions)
+These are producer-side fields in the bridge-export shape; they do not change the public
+`candidate.json` or `witness_plan.json` schema versions.
 
-### relation_graph_v1.json
-Schema version: `relation_graph/v1`
-Producer: `backend/syz-guided/state_model/build_state_model.py`
-Consumers: mutator relation guard, orchestrator relation tracker
+## Additive repo-level contracts
 
-Contains:
-- candidate_id, schema_version
-- nodes (resource and syscall nodes with types and phases)
-- edges (resource_flow and must_precede edges)
-- mutation_constraints (immutable prefix, suffix-only mutation, preserve-resource-chain rules)
+New pack manifests live under `targets/<pack>/manifest.json` and define:
 
-### triage_report_v1.json
-Schema version: `triage_report/v1`
-Producer: `backend/syz-guided/triage/report.py`
-Consumers: human review, repro wrapper
+- target metadata and maturity
+- supported entry kinds
+- lifecycle/state-machine templates
+- witness constraints
+- seed synthesis hints
+- triage metadata
+- fixture pointers
 
-Contains:
-- candidate_id, schema_version
-- crash_id, timestamp
-- crash_summary (type, allocator, stack frames)
-- candidate_match (focus_frame_hit, focus_file_hit, free_use_hint_match, uaf_type_match, match_score)
-- state_summary (prefix_valid, resource_chain_intact, phase_reached, order_preserved)
-- verdict (confirmed, plausible, unrelated, insufficient_data)
-- evidence (raw crash excerpt, matched frames, matched files)
+This is additive repository metadata, not a new runtime artifact schema.
 
-## vm_validator impact
+## Deterministic witness-plan behavior
 
-**None.** The `vm_validator/` subsystem is a pure consumer of existing runtime
-artifacts and a user of the existing triage interface. It does not modify or extend any
-schema. Its only new output (`vm_run_log.json`) is internal and disposable — no schema
-definition needed.
+`witness_plan.json` remains structurally unchanged, but plan generation is now explicitly
+canonicalized:
 
-Verified interfaces (Phase 0):
-- Consumes: `state_model_v1.json`, `target_profile.json`, `seed_*.prog` — all unchanged
-- Triage entry: `triage.report.build_triage_report(crash_text, tp, sm, program_calls)` — unchanged
-- Produces: `triage_report_v1.json` via existing `triage/report.py` — schema unchanged
+- SAT/UNSAT is still driven by the SMT encoding
+- emitted `ordered_steps` are canonicalized from the event set + partial order
+- emitted thread assignments are canonicalized from `flow`/`min_threads`
+- arbitrary solver timestamps are no longer exposed in the plan output
+
+This preserves ordering semantics while making the artifact deterministic across runs.
 
 ## Compatibility verdict
 
-All changes are **additive**. No existing artifacts are modified. The new backend is a pure consumer of bridge artifacts and producer of new runtime artifacts.
+The pivot is additive and contract-preserving:
+
+- bridge/runtime handoff schemas are unchanged
+- KVM remains supported as a legacy pack
+- new target packs are added without widening support claims beyond validated dry-run behavior
+- unsupported cases remain explicit rather than silently falling back

@@ -3,9 +3,9 @@
     "arch": "arm64",
     "kernel_area": "net/netfilter",
     "subsystem": "net",
-    "target_family": "arm64-vm-software"
+    "target_family": "net-netfilter-arm64-v1"
   },
-  "candidate_id": "cand_fixture_net_0001",
+  "candidate_id": "cand_ca6bd5da811d1948",
   "constraints": {
     "events": [
       "init_resource",
@@ -26,32 +26,61 @@
         "after": "use",
         "before": "free",
         "reason": "Use-after-free requires free to occur before use."
+      },
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "The nft set must be created before later get/dump messages can resolve it."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "The delete/get race requires teardown before a later dump-side use."
       }
     ],
-    "predicates": [],
-    "same_object": null
+    "predicates": [
+      {
+        "must_hold_at": "escape",
+        "name": "netlink_socket_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "nft_object_visible",
+        "scope": "heuristic"
+      }
+    ],
+    "same_object": true
   },
   "entries": [
     {
-      "entry_func": "nfnetlink_rcv",
-      "entry_kind": "netlink_recv",
-      "grounded": true,
-      "heuristic": false,
+      "entry_func": "nfnetlink_rcv_batch",
+      "entry_kind": "netlink_send",
+      "grounded": {
+        "confidence": "grounded",
+        "entry_func": "nfnetlink_rcv_batch",
+        "entry_kind": "netlink_send",
+        "entry_kind_hint": "netlink_send",
+        "mapping_source": "manual"
+      },
+      "heuristic": {},
       "support_level": "grounded",
       "supported": true,
       "syscall_templates": [
         {
-          "template_id": "netfilter_nft_batch:netlink_send:arm64-vm:v1",
           "calls": [
-            "socket$nl_netfilter(0x10, 0x3, 0xc)",
-            "sendmsg$NFT_BATCH(fd_nl, &msg, 0x0)",
-            "recvmsg(fd_nl, &msg, 0x0)",
-            "close(fd_nl)"
+            "socket$NETLINK_NETFILTER(AF_NETLINK, SOCK_RAW, NETLINK_NETFILTER)",
+            "sendmsg$NFT_BATCH_CREATE(fd_nl, &msg_create, 0)",
+            "sendmsg$NFT_BATCH_UPDATE(fd_nl, &msg_update, 0)",
+            "recvmsg$NETLINK_DUMP(fd_nl, &msg_dump, 0)",
+            "sendmsg$NFT_BATCH_DELETE(fd_nl, &msg_delete, 0)",
+            "close$NETLINK_NETFILTER(fd_nl)"
           ],
+          "notes": "Hardware-light netlink/netfilter scaffold covering create/update/dump/delete flows.",
           "required_resources": [
             "fd_nl"
           ],
-          "notes": "Fixture: netlink/netfilter batch send + receive + teardown."
+          "template_id": "nfnetlink_rcv_batch:netlink_send:net-netfilter-arm64:v1"
         }
       ],
       "unsupported_reasons": []
@@ -60,45 +89,147 @@
   "flow": "Con",
   "loc0": {
     "context": [
-      "nft_commit_release"
+      "nfnetlink_rcv_batch",
+      "nf_tables_destroy_set",
+      "kfree"
     ],
     "file": "net/netfilter/nf_tables_api.c",
-    "function": "nft_commit_release",
-    "line": 1111
+    "function": "nf_tables_destroy_set",
+    "line": 6123
   },
   "loc1": {
     "context": [
-      "nfnetlink_rcv"
+      "nfnetlink_rcv_batch",
+      "nf_tables_getset",
+      "nf_tables_dump_set"
     ],
-    "file": "net/netfilter/nfnetlink.c",
-    "function": "nfnetlink_rcv",
-    "line": 2222
+    "file": "net/netfilter/nf_tables_api.c",
+    "function": "nf_tables_dump_set",
+    "line": 7441
   },
   "provenance": {
-    "normalizer": "backend-fixture",
-    "raw_warning_sha256_prefix": "0000000000000000",
-    "warning_id": "uafx-net-0001"
+    "normalizer": "extractor.import_uafx_bridge_export",
+    "raw_warning_sha256_prefix": "7af1630db31e2a63",
+    "warning_id": "uafx-net-arm64-0001"
   },
   "raw_warning": {
-    "warning_id": "uafx-net-0001",
-    "note": "Synthetic fixture warning; used for backend dry-run validation only."
+    "analysis_kind": "cross_entry_uaf",
+    "arch": "arm64",
+    "condition_ops": [],
+    "efp": {
+      "clobber_sites": [
+        {
+          "function": "nf_tables_destroy_set",
+          "stmt": "kfree(set)"
+        }
+      ],
+      "escape_sites": [
+        {
+          "function": "nf_tables_newset",
+          "object_hint": "struct nft_set",
+          "stmt": "set = nft_set_alloc()"
+        }
+      ],
+      "fetch_sites": [
+        {
+          "function": "nf_tables_getset",
+          "object_hint": "struct nft_set",
+          "stmt": "set = nft_set_lookup_byhandle()"
+        }
+      ]
+    },
+    "entry_candidates": [
+      {
+        "confidence": "grounded",
+        "function": "nfnetlink_rcv_batch",
+        "kind_hint": "netlink_send"
+      }
+    ],
+    "flow": "Con",
+    "free_site": {
+      "context": [
+        "nfnetlink_rcv_batch",
+        "nf_tables_destroy_set",
+        "kfree"
+      ],
+      "file": "net/netfilter/nf_tables_api.c",
+      "function": "nf_tables_destroy_set",
+      "line": 6123
+    },
+    "kernel_area": "net/netfilter",
+    "lock_ops": [],
+    "object_hints": {
+      "object_type": "struct nft_set",
+      "same_object": true
+    },
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "The nft set must be created before later get/dump messages can resolve it."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "The delete/get race requires teardown before a later dump-side use."
+      }
+    ],
+    "predicate_hints": [
+      {
+        "must_hold_at": "escape",
+        "name": "netlink_socket_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "nft_object_visible",
+        "scope": "heuristic"
+      }
+    ],
+    "subsystem": "net",
+    "target_family": "net-netfilter-arm64-v1",
+    "thread_ops": [
+      {
+        "context_role": "free",
+        "function": "nfnetlink_rcv_batch",
+        "kind": "netlink_batch"
+      },
+      {
+        "context_role": "use",
+        "function": "nf_tables_dump_set",
+        "kind": "dump"
+      }
+    ],
+    "use_site": {
+      "context": [
+        "nfnetlink_rcv_batch",
+        "nf_tables_getset",
+        "nf_tables_dump_set"
+      ],
+      "file": "net/netfilter/nf_tables_api.c",
+      "function": "nf_tables_dump_set",
+      "line": 7441
+    },
+    "warning_id": "uafx-net-arm64-0001"
   },
   "schema_version": "candidate/v1",
   "source": {
-    "raw_file": "tests/fixtures/packs/net/uafx_bridge_export.json",
+    "raw_file": "/Users/CJ/Desktop/Kernel-stuff/madelin/backend/syz-guided/tests/fixtures/packs/net/uafx_bridge_export.json",
     "tool": "uafx-bridge-import",
-    "version": "0.1"
+    "version": "0.2"
   },
   "status": {
     "grounded_entries": [
-      "nfnetlink_rcv"
+      "nfnetlink_rcv_batch"
     ],
     "heuristic_entries": [],
-    "mapping_confidence": "fixture",
+    "mapping_confidence": "manual",
     "ready_for_smt": true,
     "supported": true,
     "unsupported_entries": [],
-    "unsupported_reasons": []
+    "unsupported_reasons": [
+      "heuristic predicate preserved: netlink_socket_ready",
+      "heuristic predicate preserved: nft_object_visible"
+    ]
   }
 }
-
