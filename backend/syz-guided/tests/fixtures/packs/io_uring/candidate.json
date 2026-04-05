@@ -1,0 +1,233 @@
+{
+  "analysis_context": {
+    "arch": "arm64",
+    "kernel_area": "fs/io_uring",
+    "subsystem": "io_uring",
+    "target_family": "io-uring-arm64-v1"
+  },
+  "candidate_id": "cand_2da2ab11b4a02071",
+  "constraints": {
+    "events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "min_threads": 2,
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Pointer must escape before later fetch/use chain."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Use-after-free requires free to occur before use."
+      },
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "The ring context must be created before register/enter recover it from the file descriptor."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "The teardown race requires ring free to happen before a later enter-side use."
+      }
+    ],
+    "predicates": [
+      {
+        "must_hold_at": "escape",
+        "name": "io_uring_ring_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "io_uring_files_registered",
+        "scope": "heuristic"
+      }
+    ],
+    "same_object": true
+  },
+  "entries": [
+    {
+      "entry_func": "__do_sys_io_uring_enter",
+      "entry_kind": "io_uring_enter",
+      "grounded": {
+        "confidence": "grounded",
+        "entry_func": "__do_sys_io_uring_enter",
+        "entry_kind": "io_uring_enter",
+        "entry_kind_hint": "io_uring_enter",
+        "mapping_source": "manual"
+      },
+      "heuristic": {},
+      "support_level": "grounded",
+      "supported": true,
+      "syscall_templates": [
+        {
+          "calls": [
+            "io_uring_setup(8, &params)",
+            "io_uring_register$IORING_REGISTER_FILES(fd_ring, &files, 1)",
+            "io_uring_enter(fd_ring, 1, 1, 0, NULL, 0)",
+            "close$io_uring(fd_ring)"
+          ],
+          "notes": "Hardware-light io_uring scaffold covering setup/register/enter/teardown.",
+          "required_resources": [
+            "fd_ring"
+          ],
+          "template_id": "__do_sys_io_uring_enter:io_uring_enter:io-uring-arm64:v1"
+        }
+      ],
+      "unsupported_reasons": []
+    }
+  ],
+  "flow": "Con",
+  "loc0": {
+    "context": [
+      "io_uring_release",
+      "io_ring_ctx_free",
+      "percpu_ref_exit"
+    ],
+    "file": "io_uring/io_uring.c",
+    "function": "io_ring_ctx_free",
+    "line": 2876
+  },
+  "loc1": {
+    "context": [
+      "__do_sys_io_uring_enter",
+      "io_uring_enter",
+      "__io_submit_flush_completions"
+    ],
+    "file": "io_uring/io_uring.c",
+    "function": "__io_submit_flush_completions",
+    "line": 2143
+  },
+  "provenance": {
+    "normalizer": "extractor.import_uafx_bridge_export",
+    "raw_warning_sha256_prefix": "cb52e13db59cce3f",
+    "warning_id": "uafx-io-uring-arm64-0001"
+  },
+  "raw_warning": {
+    "analysis_kind": "cross_entry_uaf",
+    "arch": "arm64",
+    "condition_ops": [],
+    "efp": {
+      "clobber_sites": [
+        {
+          "function": "io_ring_ctx_free",
+          "stmt": "kfree(ctx)"
+        }
+      ],
+      "escape_sites": [
+        {
+          "function": "__do_sys_io_uring_setup",
+          "object_hint": "struct io_ring_ctx",
+          "stmt": "ctx = io_ring_ctx_alloc()"
+        }
+      ],
+      "fetch_sites": [
+        {
+          "function": "__do_sys_io_uring_register",
+          "object_hint": "struct io_ring_ctx",
+          "stmt": "ctx = f.file->private_data"
+        }
+      ]
+    },
+    "entry_candidates": [
+      {
+        "confidence": "grounded",
+        "function": "__do_sys_io_uring_enter",
+        "kind_hint": "io_uring_enter"
+      }
+    ],
+    "flow": "Con",
+    "free_site": {
+      "context": [
+        "io_uring_release",
+        "io_ring_ctx_free",
+        "percpu_ref_exit"
+      ],
+      "file": "io_uring/io_uring.c",
+      "function": "io_ring_ctx_free",
+      "line": 2876
+    },
+    "kernel_area": "fs/io_uring",
+    "lock_ops": [],
+    "object_hints": {
+      "object_type": "struct io_ring_ctx",
+      "same_object": true
+    },
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "The ring context must be created before register/enter recover it from the file descriptor."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "The teardown race requires ring free to happen before a later enter-side use."
+      }
+    ],
+    "predicate_hints": [
+      {
+        "must_hold_at": "escape",
+        "name": "io_uring_ring_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "io_uring_files_registered",
+        "scope": "heuristic"
+      }
+    ],
+    "subsystem": "io_uring",
+    "target_family": "io-uring-arm64-v1",
+    "thread_ops": [
+      {
+        "context_role": "free",
+        "function": "io_uring_release",
+        "kind": "task_work"
+      },
+      {
+        "context_role": "use",
+        "function": "__do_sys_io_uring_enter",
+        "kind": "syscall"
+      }
+    ],
+    "use_site": {
+      "context": [
+        "__do_sys_io_uring_enter",
+        "io_uring_enter",
+        "__io_submit_flush_completions"
+      ],
+      "file": "io_uring/io_uring.c",
+      "function": "__io_submit_flush_completions",
+      "line": 2143
+    },
+    "warning_id": "uafx-io-uring-arm64-0001"
+  },
+  "schema_version": "candidate/v1",
+  "source": {
+    "raw_file": "/Users/CJ/Desktop/Kernel-stuff/madelin/backend/syz-guided/tests/fixtures/packs/io_uring/uafx_bridge_export.json",
+    "tool": "uafx-bridge-import",
+    "version": "0.2"
+  },
+  "status": {
+    "grounded_entries": [
+      "__do_sys_io_uring_enter"
+    ],
+    "heuristic_entries": [],
+    "mapping_confidence": "manual",
+    "ready_for_smt": true,
+    "supported": true,
+    "unsupported_entries": [],
+    "unsupported_reasons": [
+      "heuristic predicate preserved: io_uring_files_registered",
+      "heuristic predicate preserved: io_uring_ring_ready"
+    ]
+  }
+}

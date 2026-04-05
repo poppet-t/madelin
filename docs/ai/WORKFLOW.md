@@ -12,12 +12,12 @@ Use for:
 - codebase understanding
 - subsystem review
 - architecture analysis
-- deciding whether the next bottleneck is in UAFX, bridge, or MOCK
+- deciding whether the next bottleneck is in UAFX, bridge, target packs, or the syzkaller runtime backend
 - experiment design
 - planning next bounded tasks
 
 Deliverable:
-- a plan file in `docs/plans/<task>.md`
+- an updated `plans/current.md` (and any supporting `plans/*.md` handoff artifacts)
 
 ### Phase 2 — Implementation
 Default tool: Codex
@@ -72,7 +72,7 @@ Never hand off raw conversation history when a plan file can be used.
 
 ## Scope control
 For risky tasks, restrict by:
-- subproject (`uafx`, `uaf-bridge`, `mock`)
+- subproject (`uafx`, `uaf-bridge`, `backend/syz-guided`, `targets`)
 - directory
 - file list
 - test scope

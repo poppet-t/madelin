@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from common.io import load_json, write_json
 from common.schema_validation import validate_candidate
 from mapping.entry_classifier import classify_entry, infer_entry_functions
 from mapping.syscall_templates import generate_templates
+from mapping.target_registry import load_target_manifests, target_context
 
 SCHEMA_VERSION = "candidate/v1"
 DEFAULT_EVENTS: list[str] = ["init_resource", "escape", "free", "fetch", "use", "cleanup"]
@@ -63,7 +65,7 @@ def normalize_flow(raw_warning: dict[str, Any]) -> str:
 
 
 def build_candidate_id(raw_warning: dict[str, Any]) -> str:
-    canonical = __import__("json").dumps(raw_warning, sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(raw_warning, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return f"cand_{digest[:16]}"
 
@@ -161,27 +163,109 @@ def build_constraints(raw_warning: dict[str, Any], flow: str) -> dict[str, Any]:
     }
 
 
-def _build_entry_record(entry_func: str, manual_map: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _recognized_subsystem(subsystem: str | None) -> bool:
+    return isinstance(subsystem, str) and subsystem in load_target_manifests()
+
+
+def _analysis_context(raw_warning: dict[str, Any]) -> dict[str, str]:
+    metadata = raw_warning.get("metadata") if isinstance(raw_warning.get("metadata"), dict) else {}
+    kernel_area = raw_warning.get("kernel_area") if isinstance(raw_warning.get("kernel_area"), str) else metadata.get("kernel_area")
+    subsystem = raw_warning.get("subsystem") if isinstance(raw_warning.get("subsystem"), str) else metadata.get("subsystem")
+    target_family = raw_warning.get("target_family") if isinstance(raw_warning.get("target_family"), str) else metadata.get("target_family")
+    arch = raw_warning.get("arch") if isinstance(raw_warning.get("arch"), str) else metadata.get("arch")
+
+    if kernel_area or _recognized_subsystem(subsystem) or target_family:
+        return target_context(kernel_area=kernel_area, subsystem=subsystem, target_family=target_family, arch=arch)
+
+    resolved_arch = arch if isinstance(arch, str) and arch else "unknown"
+    resolved_subsystem = subsystem if isinstance(subsystem, str) and subsystem else "unknown"
+    resolved_target = target_family if isinstance(target_family, str) and target_family else f"{resolved_subsystem}-{resolved_arch}-generic"
+    resolved_area = kernel_area if isinstance(kernel_area, str) and kernel_area else "unknown"
+    return {
+        "arch": resolved_arch,
+        "kernel_area": resolved_area,
+        "subsystem": resolved_subsystem,
+        "target_family": resolved_target,
+    }
+
+
+def _normalize_entry_candidates(raw_warning: dict[str, Any], loc0: dict[str, Any], loc1: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_candidates = raw_warning.get("entry_candidates")
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    if isinstance(raw_candidates, list):
+        for candidate in raw_candidates:
+            if not isinstance(candidate, dict):
+                continue
+            entry_func = candidate.get("entry_func") if isinstance(candidate.get("entry_func"), str) else candidate.get("function")
+            if not isinstance(entry_func, str) or entry_func in seen:
+                continue
+            seen.add(entry_func)
+            normalized.append(
+                {
+                    "confidence": candidate.get("confidence") if isinstance(candidate.get("confidence"), str) else "unknown",
+                    "entry_func": entry_func,
+                    "entry_kind_hint": candidate.get("entry_kind_hint") if isinstance(candidate.get("entry_kind_hint"), str) else candidate.get("kind_hint"),
+                }
+            )
+
+    if normalized:
+        return normalized
+
+    for entry_func in infer_entry_functions(loc0["context"], loc1["context"]):
+        normalized.append({"confidence": "heuristic", "entry_func": entry_func, "entry_kind_hint": None})
+    return normalized
+
+
+def _build_entry_record(entry_candidate: str | dict[str, Any], manual_map: dict[str, dict[str, Any]], analysis_context: dict[str, str]) -> dict[str, Any]:
+    if isinstance(entry_candidate, dict):
+        entry_func = entry_candidate.get("entry_func")
+        entry_kind_hint = entry_candidate.get("entry_kind_hint")
+        confidence = entry_candidate.get("confidence") if isinstance(entry_candidate.get("confidence"), str) else None
+    else:
+        entry_func = entry_candidate
+        entry_kind_hint = None
+        confidence = None
+
+    if not isinstance(entry_func, str):
+        raise ValueError("entry candidate is missing entry_func")
+
     manual_record = manual_map.get(entry_func)
     grounded: dict[str, Any] = {"entry_func": entry_func}
     heuristic: dict[str, Any] = {}
     unsupported_reasons: list[str] = []
 
     if manual_record is not None:
-        entry_kind = str(manual_record.get("entry_kind", classify_entry(entry_func)))
+        entry_kind = str(manual_record.get("entry_kind", classify_entry(entry_func, entry_kind_hint)))
         grounded["entry_kind"] = entry_kind
         grounded["mapping_source"] = "manual"
+        if isinstance(entry_kind_hint, str):
+            grounded["entry_kind_hint"] = entry_kind_hint
     else:
-        entry_kind = classify_entry(entry_func)
-        heuristic["entry_kind"] = entry_kind
-        heuristic["mapping_source"] = "heuristic"
+        entry_kind = classify_entry(entry_func, entry_kind_hint)
+        if isinstance(entry_kind_hint, str):
+            heuristic["entry_kind_hint"] = entry_kind_hint
+            heuristic["mapping_source"] = "export_hint"
+        else:
+            heuristic["mapping_source"] = "heuristic"
 
     supported = entry_kind != "unknown"
     if not supported:
         unsupported_reasons.append(f"unsupported entry class for function '{entry_func}'")
 
-    templates = generate_templates(entry_func, entry_kind) if supported else []
+    templates = generate_templates(entry_func, entry_kind, analysis_context=analysis_context) if supported else []
+    if supported and not templates:
+        unsupported_reasons.append(
+            f"no syscall templates for entry kind '{entry_kind}' in subsystem '{analysis_context.get('subsystem', 'unknown')}'"
+        )
+
     support_level = "grounded" if manual_record is not None else "heuristic" if supported else "unsupported"
+    if confidence is not None:
+        if support_level == "grounded":
+            grounded["confidence"] = confidence
+        else:
+            heuristic["confidence"] = confidence
 
     return {
         "entry_func": entry_func,
@@ -195,8 +279,18 @@ def _build_entry_record(entry_func: str, manual_map: dict[str, dict[str, Any]]) 
     }
 
 
-def build_entries(entry_funcs: list[str], manual_map: dict[str, dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    entries = [_build_entry_record(entry_func, manual_map) for entry_func in entry_funcs]
+def build_entries(
+    entry_candidates: list[str] | list[dict[str, Any]],
+    manual_map: dict[str, dict[str, Any]],
+    analysis_context: dict[str, str] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    context = analysis_context or {
+        "arch": "unknown",
+        "kernel_area": "unknown",
+        "subsystem": "unknown",
+        "target_family": "unknown",
+    }
+    entries = [_build_entry_record(entry_candidate, manual_map, context) for entry_candidate in entry_candidates]
     grounded_entries = [entry["entry_func"] for entry in entries if entry["support_level"] == "grounded"]
     heuristic_entries = [entry["entry_func"] for entry in entries if entry["support_level"] == "heuristic"]
     unsupported_entries = [entry["entry_func"] for entry in entries if not entry["supported"]]
@@ -221,9 +315,10 @@ def normalize_warning(raw_warning: dict[str, Any], raw_file: str | None = None) 
     loc1 = normalize_location(raw_warning.get("loc1"))
     flow = normalize_flow(raw_warning)
     manual_map = load_manual_map()
+    analysis_context = _analysis_context(raw_warning)
 
-    entry_funcs = infer_entry_functions(loc0["context"], loc1["context"])
-    entries, entry_summary = build_entries(entry_funcs, manual_map)
+    entry_candidates = _normalize_entry_candidates(raw_warning, loc0, loc1)
+    entries, entry_summary = build_entries(entry_candidates, manual_map, analysis_context=analysis_context)
 
     source = raw_warning.get("source") if isinstance(raw_warning.get("source"), dict) else {}
     source_tool = source.get("tool") if isinstance(source.get("tool"), str) else "unknown-static-tool"
@@ -238,6 +333,7 @@ def normalize_warning(raw_warning: dict[str, Any], raw_file: str | None = None) 
         if isinstance(reason, str)
     ]
     candidate = {
+        "analysis_context": analysis_context,
         "candidate_id": build_candidate_id(raw_warning),
         "constraints": build_constraints(raw_warning, flow),
         "entries": entries,
@@ -247,7 +343,7 @@ def normalize_warning(raw_warning: dict[str, Any], raw_file: str | None = None) 
         "provenance": {
             "normalizer": "extractor.normalize_candidate",
             "raw_warning_sha256_prefix": hashlib.sha256(
-                __import__("json").dumps(raw_warning, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(raw_warning, sort_keys=True, separators=(",", ":")).encode("utf-8")
             ).hexdigest()[:16],
             "warning_id": raw_warning.get("warning_id") if isinstance(raw_warning.get("warning_id"), str) else None,
         },
@@ -282,12 +378,10 @@ def main(argv: list[str] | None = None) -> int:
     candidate_id: str | None = None
     try:
         input_path = Path(args.input)
-        output_path = Path(args.output)
         raw_warning = load_json(input_path)
-        candidate_id = build_candidate_id(raw_warning)
         candidate = normalize_warning(raw_warning, raw_file=str(input_path))
-        validate_candidate(candidate)
-        write_json(output_path, candidate)
+        candidate_id = candidate.get("candidate_id") if isinstance(candidate.get("candidate_id"), str) else None
+        write_json(Path(args.output), candidate)
     except Exception as exc:
         return print_cli_error("normalize_candidate", exc, candidate_id)
 

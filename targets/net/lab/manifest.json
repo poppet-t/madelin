@@ -1,0 +1,32 @@
+{
+  "pack": "net-lab",
+  "subsystem": "net",
+  "scope": "lab-only",
+  "lab_only": true,
+  "target_family": "net-netfilter-lab-uaf-v1",
+  "description": "Synthetic nf_tables lab target for proving Madelin can capture and classify a controlled net use-after-free end to end.",
+  "proof_kernel_patch": "targets/net/proof/nftables-controlled-proof-uaf.patch",
+  "expected_free_use_pair": {
+    "free_function": "nf_tables_destroy_set",
+    "use_function": "nf_tables_dump_set",
+    "source_file": "net/netfilter/nf_tables_api.c"
+  },
+  "trigger_path": [
+    "socket$NETLINK_NETFILTER",
+    "sendmsg$NFT_BATCH_CREATE",
+    "sendmsg$NFT_BATCH_DELETE",
+    "recvmsg$NETLINK_DUMP"
+  ],
+  "success_criteria": [
+    "KASAN or equivalent real kernel crash signal is observed",
+    "The crash reproduces at least twice under the same settings",
+    "The saved source frames show both nf_tables_destroy_set and nf_tables_dump_set",
+    "The runtime lane emits manual_known_bug_review.json and a minimized seed handoff artifact"
+  ],
+  "does_not_prove": [
+    "general real-world net bug discovery",
+    "novelty or CVE status",
+    "exploitability",
+    "support outside the current lab-only proof target"
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "pack": "fs",
+  "subsystem": "fs",
+  "maturity": "scaffolded",
+  "arch": "arm64",
+  "target_families": ["fs-mount-arm64-v1", "fs-fuse-arm64-v1"],
+  "kernel_area_prefixes": ["fs/namespace", "fs/fs_context", "fs/fuse"],
+  "supported_entry_kinds": ["mount_api_step", "fuse_control", "close_teardown", "fd_dup_or_share", "poll_wait", "mmap_interaction"],
+  "lifecycle_templates": [
+    "fsopen -> fsconfig -> fsmount -> move_mount -> umount2",
+    "mount API setup in thread A while teardown/use races in thread B",
+    "fuse open -> read/write init -> ioctl/control -> teardown"
+  ],
+  "witness_constraints": [
+    "Preserve fsopen/fsconfig/fsmount ordering.",
+    "Keep teardown after setup for mount/FUSE templates."
+  ],
+  "resource_chain": [
+    {"resource": "fd_fsctx", "type": "fd", "producer_call": "fsopen", "consumer_calls": ["fsconfig$SET_STRING", "fsmount", "close$fsopen"]},
+    {"resource": "fd_mount", "type": "fd", "producer_call": "fsmount", "consumer_calls": ["move_mount", "umount2", "close$fsmount"]}
+  ],
+  "phase_calls": {
+    "bootstrap": ["fsopen"],
+    "configure": ["fsconfig$SET_STRING", "fsmount"],
+    "trigger": ["move_mount", "umount2", "close$fsmount", "close$fsopen"]
+  },
+  "favored_suffix_calls": ["move_mount", "umount2", "close$fsmount", "close$fsopen"],
+  "call_aliases": {},
+  "seed_variants": [
+    {"name": "mount_move", "suffix": ["move_mount"]},
+    {"name": "mount_umount", "suffix": ["move_mount", "umount2"]},
+    {"name": "close_context", "suffix": ["close$fsmount", "close$fsopen"]},
+    {"name": "move_close", "suffix": ["move_mount", "close$fsmount", "close$fsopen"]}
+  ],
+  "syz_call_map": {
+    "fsopen": "r0 = fsopen(&AUTO=\"tmpfs\\x00\", 0x0)",
+    "fsconfig$SET_STRING": "fsconfig$FSCONFIG_SET_STRING(r0, 0x1, &AUTO=\"size\\x00\", &AUTO=\"4096\\x00\", 0x0)",
+    "fsmount": "r1 = fsmount(r0, 0x0, 0x0)",
+    "move_mount": "move_mount(r1, &AUTO=\"\\x00\", 0xffffffffffffff9c, &AUTO=\"/tmp/madelin\\x00\", 0x0)",
+    "umount2": "umount2(&AUTO=\"/tmp/madelin\\x00\", 0x0)",
+    "close$fsmount": "close(r1)",
+    "close$fsopen": "close(r0)"
+  },
+  "triage_signal_rules": [
+    "Match fs_context or mount teardown frames.",
+    "Prefer crashes after mount API teardown/use sequences."
+  ],
+  "fixture_paths": {
+    "raw_warning": "uaf-bridge/uafx_fork/samples/raw_uafx_fs_warning.json",
+    "bridge_export": "uaf-bridge/extractor/sample_uafx_fs_bridge_export.json",
+    "backend_fixture_dir": "backend/syz-guided/tests/fixtures/packs/fs"
+  }
+}

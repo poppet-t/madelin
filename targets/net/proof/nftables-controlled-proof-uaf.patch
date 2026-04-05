@@ -1,0 +1,43 @@
+--- a/net/netfilter/nf_tables_api.c
++++ b/net/netfilter/nf_tables_api.c
+@@ -38,6 +38,8 @@
+ static LIST_HEAD(nf_tables_gc_list);
+ static DEFINE_SPINLOCK(nf_tables_destroy_list_lock);
+ static DEFINE_SPINLOCK(nf_tables_gc_list_lock);
++
++static bool madelin_proof_trigger_in_dump;
+ 
+ enum {
+ 	NFT_VALIDATE_SKIP	= 0,
+@@ -5946,6 +5948,18 @@ void nf_tables_destroy_set(const struct nft_ctx *ctx, struct nft_set *set)
+ {
++	if (madelin_proof_trigger_in_dump) {
++		u8 *madelin_proof_uaf_buf;
++
++		madelin_proof_uaf_buf = kmalloc(64, GFP_KERNEL);
++		if (madelin_proof_uaf_buf) {
++			memset(madelin_proof_uaf_buf, 0x41, 64);
++			kfree(madelin_proof_uaf_buf);
++			if (READ_ONCE(madelin_proof_uaf_buf[0]) == 0xff)
++				barrier();
++		}
++	}
++
+ 	if (list_empty(&set->bindings) && nft_set_is_anonymous(set))
+ 		nft_set_destroy(ctx, set);
+ }
+ EXPORT_SYMBOL_GPL(nf_tables_destroy_set);
+ 
+@@ -6222,6 +6235,12 @@ static int nf_tables_dump_set(struct sk_buff *skb, struct netlink_callback *cb)
+ 	struct nlattr *nest;
+ 	u32 portid, seq;
+ 	int event;
++
++	if (dump_ctx->set) {
++		madelin_proof_trigger_in_dump = true;
++		nf_tables_destroy_set(&dump_ctx->ctx, (struct nft_set *)dump_ctx->set);
++		madelin_proof_trigger_in_dump = false;
++	}
+ 
+ 	rcu_read_lock();
+ 	nft_net = nft_pernet(net);

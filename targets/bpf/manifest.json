@@ -1,0 +1,54 @@
+{
+  "pack": "bpf",
+  "subsystem": "bpf",
+  "maturity": "scaffolded",
+  "arch": "arm64",
+  "target_families": ["bpf-arm64-v1"],
+  "kernel_area_prefixes": ["kernel/bpf", "net/core/filter"],
+  "supported_entry_kinds": ["bpf_cmd", "close_teardown", "fd_dup_or_share", "poll_wait"],
+  "lifecycle_templates": [
+    "map_create -> prog_load -> link_create -> update/query -> detach -> close",
+    "attach in thread A while detach/close races in thread B"
+  ],
+  "witness_constraints": [
+    "Preserve map creation before update/query.",
+    "Preserve program/link creation before detach."
+  ],
+  "resource_chain": [
+    {"resource": "fd_map", "type": "fd", "producer_call": "bpf$MAP_CREATE", "consumer_calls": ["bpf$MAP_UPDATE_ELEM", "close$bpf_map"]},
+    {"resource": "fd_prog", "type": "fd", "producer_call": "bpf$PROG_LOAD", "consumer_calls": ["bpf$BPF_LINK_CREATE", "close$bpf_prog"]},
+    {"resource": "fd_link", "type": "fd", "producer_call": "bpf$BPF_LINK_CREATE", "consumer_calls": ["bpf$LINK_DETACH", "close$bpf_link"]}
+  ],
+  "phase_calls": {
+    "bootstrap": ["bpf$MAP_CREATE", "bpf$PROG_LOAD"],
+    "configure": ["bpf$BPF_LINK_CREATE", "bpf$MAP_UPDATE_ELEM"],
+    "trigger": ["bpf$LINK_DETACH", "close$bpf_link", "close$bpf_prog", "close$bpf_map"]
+  },
+  "favored_suffix_calls": ["bpf$LINK_DETACH", "close$bpf_link", "close$bpf_prog", "close$bpf_map"],
+  "call_aliases": {},
+  "seed_variants": [
+    {"name": "detach_only", "suffix": ["bpf$LINK_DETACH"]},
+    {"name": "detach_close", "suffix": ["bpf$LINK_DETACH", "close$bpf_link"]},
+    {"name": "close_all", "suffix": ["close$bpf_link", "close$bpf_prog", "close$bpf_map"]},
+    {"name": "update_detach", "suffix": ["bpf$MAP_UPDATE_ELEM", "bpf$LINK_DETACH", "close$bpf_link"]}
+  ],
+  "syz_call_map": {
+    "bpf$MAP_CREATE": "r0 = bpf$MAP_CREATE(&AUTO={0x1, 0x4, 0x8, 0x40, 0x0, 0x0, 0x0})",
+    "bpf$PROG_LOAD": "r1 = bpf$PROG_LOAD(&AUTO={0x1, 0x2, &AUTO=\"\\xb7\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x95\\x00\\x00\\x00\\x00\\x00\\x00\\x00\", 0x10, \"GPL\\x00\", 0x0, 0x0, 0x0, 0x0, 0x0})",
+    "bpf$BPF_LINK_CREATE": "r2 = bpf$BPF_LINK_CREATE(&AUTO={r1, 0x0, 0x0, 0x0})",
+    "bpf$MAP_UPDATE_ELEM": "bpf$MAP_UPDATE_ELEM(&AUTO={r0, &AUTO=0x0, &AUTO=0x0, 0x0})",
+    "bpf$LINK_DETACH": "bpf$LINK_DETACH(&AUTO={r2})",
+    "close$bpf_link": "close(r2)",
+    "close$bpf_prog": "close(r1)",
+    "close$bpf_map": "close(r0)"
+  },
+  "triage_signal_rules": [
+    "Match bpf map/program/link lifetime frames.",
+    "Prefer crashes after detach/close interleavings."
+  ],
+  "fixture_paths": {
+    "raw_warning": "uaf-bridge/uafx_fork/samples/raw_uafx_bpf_warning.json",
+    "bridge_export": "uaf-bridge/extractor/sample_uafx_bpf_bridge_export.json",
+    "backend_fixture_dir": "backend/syz-guided/tests/fixtures/packs/bpf"
+  }
+}

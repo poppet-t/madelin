@@ -21,7 +21,8 @@ Preserve architecture and artifact contracts unless the task explicitly authoriz
 
 ## Repository focus
 This repo implements a narrow static-to-SMT-to-runtime bridge for cross-entry UAF research,
-with a current emphasis on Linux arm64 KVM workflows and the MOCK handoff path.
+with a current emphasis on artifact-driven validation in hardware-light arm64 Linux VMs,
+scoped by target packs (legacy/initial pack: arm64 KVM).
 
 ## Operating rules
 - Read relevant files before editing.
@@ -37,7 +38,7 @@ with a current emphasis on Linux arm64 KVM workflows and the MOCK handoff path.
 
 ## Architecture guardrails
 - Preserve the artifact flow:
-  `UAFX warning -> candidate.json -> witness_plan.json -> witness.syz / MOCK seed`
+  `UAFX warning/bridge-export -> candidate.json -> witness_plan.json -> witness.syz -> backend/syz-guided`
 - Keep transforms deterministic up to the dynamic stage.
 - SMT must use stock Z3 behavior; do not introduce solver-side modifications.
 - Unsupported cases should fail clearly with typed or structured messages.
@@ -63,13 +64,14 @@ End substantive tasks with:
 
 ## Project pointers
 Primary areas usually involved:
+- `uafx/`
 - `uaf-bridge/extractor/`
 - `uaf-bridge/mapping/`
 - `uaf-bridge/smt/`
 - `uaf-bridge/runtime/`
-- `mock/tools/`
-- `mock/scripts/`
-- `docs/plans/`
+- `backend/syz-guided/`
+- `targets/`
+- `plans/`
 - `scripts/`
 
 ## Validation discipline
@@ -78,7 +80,7 @@ Examples:
 - schema validation
 - narrow bridge unit tests
 - witness emission smoke
-- mock seed import smoke
+- backend seedgen/campaign/triage smokes
 - remote-target preflight
 EOF
 
@@ -103,7 +105,7 @@ This repository implements a prototype UAF witness bridge that connects:
 2. normalized candidate extraction
 3. SMT-based structural feasibility solving
 4. runtime witness or seed emission
-5. downstream MOCK-oriented fuzzing handoff
+5. downstream syzkaller runtime backend consumption
 
 ## Current emphasis
 The current implementation is intentionally narrow and optimized for:
@@ -134,7 +136,7 @@ cat > "$REPO_ROOT/context/architecture.md" <<'EOF'
 ## Pipeline
 The system is organized as a staged pipeline:
 
-`warning -> candidate extraction -> mapping/classification -> SMT encoding/solve -> witness plan -> runtime emission -> MOCK import/seeded fuzzing`
+`warning -> candidate extraction -> mapping/classification -> SMT encoding/solve -> witness plan -> runtime emission -> backend/syz-guided consumption`
 
 ## Main stages
 
@@ -167,7 +169,7 @@ Responsibilities:
 - produce SAT/UNSAT outcomes with useful witness metadata
 
 ### 4. Runtime emission
-Converts candidate + witness plan into a deterministic pseudo-syzkaller scaffold or MOCK-facing seed material.
+Converts candidate + witness plan into a deterministic pseudo-syzkaller scaffold and/or small harnesses for runtime consumption.
 
 Responsibilities:
 - preserve plan ordering
@@ -175,8 +177,8 @@ Responsibilities:
 - keep dynamic repair in the runtime/fuzzing stage, not the bridge stages
 - expose relations/hints to downstream tooling
 
-### 5. MOCK handoff
-Imports bridge outputs into MOCK seed and bias formats for targeted fuzzing.
+### 5. Runtime backend handoff
+Consumes bridge outputs in a syzkaller-based runtime backend (seed synthesis, campaign orchestration, triage).
 
 Responsibilities:
 - preserve stable resource prefixes
@@ -196,7 +198,7 @@ cat > "$REPO_ROOT/context/invariants.md" <<'EOF'
 
 ## Contract invariants
 - Preserve the pipeline contract:
-  `warning -> candidate.json -> witness_plan.json -> emitted scaffold / imported seed`
+  `warning -> candidate.json -> witness_plan.json -> emitted scaffold -> backend runtime artifacts`
 - Do not rename or remove schema fields without explicit authorization.
 - If a schema must change, update every affected producer, consumer, validator, and smoke path.
 
@@ -226,7 +228,7 @@ cat > "$REPO_ROOT/context/commands.md" <<'EOF'
 
 ## Environment checks
 - `python3 uaf-bridge/scripts/check_env.py`
-- `bash mock/scripts/check_remote_target.sh`
+- `bash backend/syz-guided/scripts/smoke_seedgen.sh`
 
 ## Narrow smoke paths
 - `bash scripts/e2e_witness_smoke.sh`
@@ -240,8 +242,9 @@ cat > "$REPO_ROOT/context/commands.md" <<'EOF'
 ## Demo path
 - `bash uaf-bridge/scripts/run_end_to_end_kvm_demo.sh`
 
-## MOCK-side import
-- `python3 mock/tools/import_bridge_seed.py ...`
+## Backend consumption
+- `python3 backend/syz-guided/state_model/build_state_model.py ...`
+- `python3 backend/syz-guided/seedgen/synthesize_seeds.py ...`
 
 ## What to run first
 1. environment preflight
@@ -271,7 +274,7 @@ cat > "$REPO_ROOT/context/known-issues.md" <<'EOF'
 
 ## Typical risk areas
 - schema drift between stages
-- bridge-to-MOCK ordering semantics not being enforced strongly enough downstream
+- bridge-to-backend ordering semantics not being enforced strongly enough downstream
 - demo-only paths becoming mistaken for general support
 - environment-dependent verifier or kernel-fuzzing workflows
 - shell-script sprawl and duplicated workflow logic
@@ -364,13 +367,13 @@ EOF
 cat > "$REPO_ROOT/skills/witness-bridge-task/SKILL.md" <<'EOF'
 ---
 name: witness-bridge-task
-description: Use for changes to the UAFX -> candidate -> SMT -> runtime -> MOCK bridge. Enforces contract preservation, narrow diffs, and validation discipline.
+description: Use for changes to the UAFX -> candidate -> SMT -> runtime bridge. Enforces contract preservation, narrow diffs, and validation discipline.
 ---
 
 # witness-bridge-task
 
 ## Use this when
-- Editing extraction, mapping, SMT, runtime emission, or MOCK import logic
+- Editing extraction, mapping, SMT, runtime emission, or backend-facing handoff logic
 - Changing artifact boundaries
 - Adding support for a narrow new entry family
 - Debugging witness feasibility or scaffold generation
@@ -393,7 +396,6 @@ Before editing, identify whether the change affects:
 - candidate schema
 - witness plan schema
 - runtime emitter assumptions
-- mock seed importer assumptions
 - ordering semantics
 - stable resource prefix expectations
 
@@ -461,7 +463,7 @@ EOF
 cat > "$REPO_ROOT/skills/arm64-kvm-smoke/SKILL.md" <<'EOF'
 ---
 name: arm64-kvm-smoke
-description: Use when validating narrow arm64 KVM demo or smoke paths across bridge and MOCK integration.
+description: Use when validating the legacy/initial arm64 KVM pack across bridge, backend, and runtime proof paths.
 ---
 
 # arm64-kvm-smoke
@@ -469,7 +471,7 @@ description: Use when validating narrow arm64 KVM demo or smoke paths across bri
 ## Use this when
 - A task touches arm64 KVM mapping
 - A task changes witness emission for KVM flows
-- A task affects MOCK seed preparation or KVM-specific relations
+- A task affects backend seed preparation or KVM-specific relations
 - A task updates remote-target preflight behavior
 
 ## Required reads

@@ -1,9 +1,4 @@
-"""Post-process one raw UAFX warning into the richer bridge export shape.
-
-This is written as a narrow integration stub for one KVM/arm64 candidate family.
-It is intended to be copied into a real UAFX fork or used as a standalone
-post-processor around existing raw UAFX warning JSON output.
-"""
+"""Post-process one raw UAFX warning into the richer bridge export shape."""
 
 from __future__ import annotations
 
@@ -12,8 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from common.io import load_json, write_json
+from mapping.target_registry import target_context
 
-EXPORT_VERSION = "0.1"
+EXPORT_VERSION = "0.2"
 
 
 def _normalize_location(raw_loc: Any) -> dict[str, Any]:
@@ -97,8 +93,16 @@ def export_bridge_candidate(raw_warning: dict[str, Any]) -> dict[str, Any]:
     loc0 = _normalize_location(raw_warning.get("free_site"))
     loc1 = _normalize_location(raw_warning.get("use_site"))
     efp = raw_warning.get("efp") if isinstance(raw_warning.get("efp"), dict) else {}
+    resolved_context = target_context(
+        kernel_area=raw_warning.get("kernel_area") if isinstance(raw_warning.get("kernel_area"), str) else None,
+        subsystem=raw_warning.get("subsystem") if isinstance(raw_warning.get("subsystem"), str) else None,
+        target_family=raw_warning.get("target_family") if isinstance(raw_warning.get("target_family"), str) else None,
+        arch=raw_warning.get("arch") if isinstance(raw_warning.get("arch"), str) else None,
+        default_pack="kvm",
+    )
 
     return {
+        "arch": resolved_context["arch"],
         "condition_summary": {
             "conditions": raw_warning.get("condition_ops", []) if isinstance(raw_warning.get("condition_ops"), list) else []
         },
@@ -115,7 +119,7 @@ def export_bridge_candidate(raw_warning: dict[str, Any]) -> dict[str, Any]:
         "entry_summary": _entry_summary(raw_warning, loc0, loc1),
         "export_version": EXPORT_VERSION,
         "flow": raw_warning.get("flow") if isinstance(raw_warning.get("flow"), str) else "Unknown",
-        "kernel_area": raw_warning.get("kernel_area") if isinstance(raw_warning.get("kernel_area"), str) else "arch/arm64/kvm",
+        "kernel_area": resolved_context["kernel_area"],
         "loc0": loc0,
         "loc1": loc1,
         "lock_summary": {
@@ -123,6 +127,8 @@ def export_bridge_candidate(raw_warning: dict[str, Any]) -> dict[str, Any]:
         },
         "raw_warning": raw_warning,
         "source_tool": "uafx",
+        "subsystem": resolved_context["subsystem"],
+        "target_family": resolved_context["target_family"],
         "thread_summary": {
             "events": raw_warning.get("thread_ops", []) if isinstance(raw_warning.get("thread_ops"), list) else []
         },

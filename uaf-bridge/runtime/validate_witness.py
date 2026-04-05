@@ -18,6 +18,7 @@ from mapping.syz_descriptions import (
 )
 from runtime.emit_witness_syz import (
     ordered_plan_steps_with_threads,
+    render_witness,
     select_representative_template,
     template_witness_families,
     thread_ids_by_event,
@@ -209,7 +210,7 @@ def validate_witness(
     witness_text: str,
     syz_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Validate a runnable narrow-KVM witness against the selected template and plan."""
+    """Validate a runnable witness against the selected template and plan."""
     validate_candidate(candidate)
     validate_witness_plan(plan)
 
@@ -217,6 +218,25 @@ def validate_witness(
         raise ValueError("witness plan is UNSAT; cannot validate runnable witness")
     if candidate.get("candidate_id") != plan.get("candidate_id"):
         raise ValueError("candidate_id mismatch between candidate and witness plan")
+
+    analysis_context = candidate.get("analysis_context")
+    subsystem = analysis_context.get("subsystem") if isinstance(analysis_context, dict) else None
+    if subsystem != "kvm":
+        expected = render_witness(candidate, plan, syz_root=syz_root)
+        if witness_text != expected:
+            raise ValueError("generic pack witness does not match deterministic renderer")
+        entry_func, entry_kind, template = select_representative_template(candidate, plan)
+        call_count = len([line for line in witness_text.splitlines() if line and not line.startswith("#")])
+        return {
+            "candidate_id": candidate["candidate_id"],
+            "call_count": call_count,
+            "entry_func": entry_func,
+            "entry_kind": entry_kind,
+            "plan_step_count": len(ordered_plan_steps_with_threads(plan)),
+            "representative_template_id": str(template.get("template_id", "unknown_template")),
+            "syzkaller_root": "pack-generic",
+            "valid": True,
+        }
 
     entry_func, entry_kind, template = select_representative_template(candidate, plan)
     template_id = str(template.get("template_id", "unknown_template"))

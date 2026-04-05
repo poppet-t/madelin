@@ -1,0 +1,239 @@
+{
+  "analysis_context": {
+    "arch": "arm64",
+    "kernel_area": "kernel/bpf",
+    "subsystem": "bpf",
+    "target_family": "bpf-arm64-v1"
+  },
+  "candidate_id": "cand_ddfd5e8d2ec2d689",
+  "constraints": {
+    "events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "min_threads": 2,
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Pointer must escape before later fetch/use chain."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Use-after-free requires free to occur before use."
+      },
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Map/program/link objects must be created before later update or query paths use them."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Detach and close must race ahead of the later lookup-side use."
+      }
+    ],
+    "predicates": [
+      {
+        "must_hold_at": "escape",
+        "name": "bpf_map_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "bpf_link_attached",
+        "scope": "heuristic"
+      }
+    ],
+    "same_object": true
+  },
+  "entries": [
+    {
+      "entry_func": "__sys_bpf",
+      "entry_kind": "bpf_cmd",
+      "grounded": {
+        "confidence": "grounded",
+        "entry_func": "__sys_bpf",
+        "entry_kind": "bpf_cmd",
+        "entry_kind_hint": "bpf_cmd",
+        "mapping_source": "manual"
+      },
+      "heuristic": {},
+      "support_level": "grounded",
+      "supported": true,
+      "syscall_templates": [
+        {
+          "calls": [
+            "bpf$MAP_CREATE(&map_create)",
+            "bpf$PROG_LOAD(&prog_load)",
+            "bpf$BPF_LINK_CREATE(&link_create)",
+            "bpf$MAP_UPDATE_ELEM(fd_map, &key, &value, 0)",
+            "bpf$LINK_DETACH(fd_link)",
+            "close$bpf_link(fd_link)",
+            "close$bpf_prog(fd_prog)",
+            "close$bpf_map(fd_map)"
+          ],
+          "notes": "Hardware-light eBPF scaffold covering map/program/link create/attach/detach lifetimes.",
+          "required_resources": [
+            "fd_map",
+            "fd_prog",
+            "fd_link"
+          ],
+          "template_id": "__sys_bpf:bpf_cmd:bpf-arm64:v1"
+        }
+      ],
+      "unsupported_reasons": []
+    }
+  ],
+  "flow": "Con",
+  "loc0": {
+    "context": [
+      "__sys_bpf",
+      "bpf_link_free",
+      "kfree"
+    ],
+    "file": "kernel/bpf/syscall.c",
+    "function": "bpf_link_free",
+    "line": 4988
+  },
+  "loc1": {
+    "context": [
+      "__sys_bpf",
+      "map_lookup_elem",
+      "bpf_map_lookup_elem"
+    ],
+    "file": "kernel/bpf/syscall.c",
+    "function": "bpf_map_lookup_elem",
+    "line": 1632
+  },
+  "provenance": {
+    "normalizer": "extractor.import_uafx_bridge_export",
+    "raw_warning_sha256_prefix": "265e523dd9b4e018",
+    "warning_id": "uafx-bpf-arm64-0001"
+  },
+  "raw_warning": {
+    "analysis_kind": "cross_entry_uaf",
+    "arch": "arm64",
+    "condition_ops": [],
+    "efp": {
+      "clobber_sites": [
+        {
+          "function": "bpf_link_free",
+          "stmt": "kfree(link)"
+        }
+      ],
+      "escape_sites": [
+        {
+          "function": "bpf_link_prime",
+          "object_hint": "struct bpf_link",
+          "stmt": "link = fdget_raw()"
+        }
+      ],
+      "fetch_sites": [
+        {
+          "function": "map_lookup_elem",
+          "object_hint": "struct bpf_link",
+          "stmt": "link = container_of(map, struct bpf_link, map)"
+        }
+      ]
+    },
+    "entry_candidates": [
+      {
+        "confidence": "grounded",
+        "function": "__sys_bpf",
+        "kind_hint": "bpf_cmd"
+      }
+    ],
+    "flow": "Con",
+    "free_site": {
+      "context": [
+        "__sys_bpf",
+        "bpf_link_free",
+        "kfree"
+      ],
+      "file": "kernel/bpf/syscall.c",
+      "function": "bpf_link_free",
+      "line": 4988
+    },
+    "kernel_area": "kernel/bpf",
+    "lock_ops": [],
+    "object_hints": {
+      "object_type": "struct bpf_link",
+      "same_object": true
+    },
+    "partial_order": [
+      {
+        "after": "fetch",
+        "before": "escape",
+        "reason": "Map/program/link objects must be created before later update or query paths use them."
+      },
+      {
+        "after": "use",
+        "before": "free",
+        "reason": "Detach and close must race ahead of the later lookup-side use."
+      }
+    ],
+    "predicate_hints": [
+      {
+        "must_hold_at": "escape",
+        "name": "bpf_map_ready",
+        "scope": "heuristic"
+      },
+      {
+        "must_hold_at": "fetch",
+        "name": "bpf_link_attached",
+        "scope": "heuristic"
+      }
+    ],
+    "subsystem": "bpf",
+    "target_family": "bpf-arm64-v1",
+    "thread_ops": [
+      {
+        "context_role": "free",
+        "function": "__sys_bpf",
+        "kind": "syscall"
+      },
+      {
+        "context_role": "use",
+        "function": "__sys_bpf",
+        "kind": "syscall"
+      }
+    ],
+    "use_site": {
+      "context": [
+        "__sys_bpf",
+        "map_lookup_elem",
+        "bpf_map_lookup_elem"
+      ],
+      "file": "kernel/bpf/syscall.c",
+      "function": "bpf_map_lookup_elem",
+      "line": 1632
+    },
+    "warning_id": "uafx-bpf-arm64-0001"
+  },
+  "schema_version": "candidate/v1",
+  "source": {
+    "raw_file": "/Users/CJ/Desktop/Kernel-stuff/madelin/backend/syz-guided/tests/fixtures/packs/bpf/uafx_bridge_export.json",
+    "tool": "uafx-bridge-import",
+    "version": "0.2"
+  },
+  "status": {
+    "grounded_entries": [
+      "__sys_bpf"
+    ],
+    "heuristic_entries": [],
+    "mapping_confidence": "manual",
+    "ready_for_smt": true,
+    "supported": true,
+    "unsupported_entries": [],
+    "unsupported_reasons": [
+      "heuristic predicate preserved: bpf_link_attached",
+      "heuristic predicate preserved: bpf_map_ready"
+    ]
+  }
+}

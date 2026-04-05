@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Synthesize runnable syzkaller .prog seeds from state_model_v1.json.
-
-Seeds preserve the mandatory bootstrap prefix and the KVM resource chain.
-Each seed is a text file in syzkaller's prog format.
-
-Usage:
-    python synthesize_seeds.py \
-        --state-model path/to/state_model_v1.json \
-        --out-dir path/to/seeds/
-"""
+"""Synthesize runnable syzkaller .prog seeds from state_model_v1.json."""
 
 from __future__ import annotations
 
@@ -16,89 +7,64 @@ import argparse
 import json
 import pathlib
 import sys
-from typing import Any
 
-# ---------------------------------------------------------------------------
-# KVM arm64 call → syz line mapping (v1 narrow slice)
-# ---------------------------------------------------------------------------
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-_SYZ_CALL_MAP: dict[str, str] = {
-    "openat$KVM": 'r0 = openat$kvm(0xffffffffffffff9c, &AUTO="/dev/kvm\\x00", 0x2, 0x0)',
-    "ioctl$KVM_CREATE_VM": "r1 = ioctl$KVM_CREATE_VM(r0, 0xae01, 0x0)",
-    "ioctl$KVM_CREATE_VCPU": "r2 = ioctl$KVM_CREATE_VCPU(r1, 0xae41, 0x0)",
-    "ioctl$KVM_ARM_VCPU_INIT": "ioctl$KVM_ARM_VCPU_INIT(r2, 0xae02, &AUTO={0x0, 0x0})",
-    "ioctl$KVM_SET_ONE_REG": "ioctl$KVM_SET_ONE_REG(r2, 0xae04, &AUTO={0x6030000000100042, &AUTO=0x0})",
-    "ioctl$KVM_GET_ONE_REG": "ioctl$KVM_GET_ONE_REG(r2, 0xae05, &AUTO={0x6030000000100042, &AUTO})",
-    "ioctl$KVM_RUN": "ioctl$KVM_RUN(r2, 0xae80, 0x0)",
-    "close$KVM": "close(r2)",
-}
-
-# v1 seed variants — each is a different suffix permutation after the prefix.
-_SEED_VARIANTS = [
-    # Variant 0: full run — bootstrap + configure + run
-    {
-        "name": "full_run",
-        "suffix": ["ioctl$KVM_RUN"],
-    },
-    # Variant 1: run + close — trigger teardown race
-    {
-        "name": "run_close",
-        "suffix": ["ioctl$KVM_RUN", "close$KVM"],
-    },
-    # Variant 2: double run — stress timer path
-    {
-        "name": "double_run",
-        "suffix": ["ioctl$KVM_RUN", "ioctl$KVM_RUN"],
-    },
-    # Variant 3: close only — immediate teardown
-    {
-        "name": "close_only",
-        "suffix": ["close$KVM"],
-    },
-]
+from pack_registry import resolve_target_manifest
 
 
-def _render_prog(calls: list[str], candidate_id: str, variant_name: str) -> str:
-    """Render a list of canonical call names into syzkaller prog text."""
+def _render_prog(
+    calls: list[str],
+    candidate_id: str,
+    variant_name: str,
+    immutable_prefix_len: int,
+    call_map: dict[str, str],
+) -> str:
     lines = [f"# candidate: {candidate_id}"]
     lines.append(f"# variant: {variant_name}")
-    lines.append(f"# immutable_prefix: {_count_prefix(calls)}")
+    lines.append(f"# immutable_prefix: {immutable_prefix_len}")
     lines.append("")
 
     for call in calls:
-        syz_line = _SYZ_CALL_MAP.get(call)
+        syz_line = call_map.get(call)
         if syz_line is None:
-            lines.append(f"# UNSUPPORTED: {call}")
-        else:
-            lines.append(syz_line)
+            raise ValueError(f"Unsupported call for seed synthesis: {call}")
+        lines.append(syz_line)
 
     return "\n".join(lines) + "\n"
 
 
-def _count_prefix(calls: list[str]) -> int:
-    """Count bootstrap prefix calls."""
-    prefix_calls = {"openat$KVM", "ioctl$KVM_CREATE_VM", "ioctl$KVM_CREATE_VCPU"}
-    count = 0
-    for c in calls:
-        if c in prefix_calls:
-            count += 1
-        else:
-            break
-    return count
+def _manifest_for_state_model(state_model: dict) -> dict:
+    return resolve_target_manifest(
+        subsystem=state_model.get("subsystem") if isinstance(state_model.get("subsystem"), str) else None,
+        target_family=state_model.get("target_family") if isinstance(state_model.get("target_family"), str) else None,
+    )
+
+
+def _seed_variants(state_model: dict, manifest: dict) -> list[dict]:
+    variants = manifest.get("seed_variants", [])
+    if not isinstance(variants, list) or not variants:
+        trigger_calls = state_model.get("phases", {}).get("trigger", {}).get("calls", [])
+        return [{"name": "full", "suffix": [str(call) for call in trigger_calls if isinstance(call, str)]}]
+    return [variant for variant in variants if isinstance(variant, dict)]
 
 
 def synthesize(state_model: dict) -> list[dict]:
-    """Generate seed programs from state model. Returns list of {name, calls, prog_text}."""
     bootstrap = state_model["phases"]["bootstrap"]["calls"]
     configure = state_model["phases"]["configure"]["calls"]
     candidate_id = state_model["candidate_id"]
+    immutable_prefix_len = int(state_model.get("immutable_prefix_len", len(bootstrap)))
+    manifest = _manifest_for_state_model(state_model)
+    call_map = {str(key): str(value) for key, value in manifest.get("syz_call_map", {}).items() if isinstance(key, str)}
+    variants = _seed_variants(state_model, manifest)
 
     seeds = []
-    for variant in _SEED_VARIANTS:
-        calls = bootstrap + configure + variant["suffix"]
-        prog_text = _render_prog(calls, candidate_id, variant["name"])
+    for variant in variants:
+        suffix = [str(call) for call in variant.get("suffix", []) if isinstance(call, str)]
+        calls = list(bootstrap) + list(configure) + suffix
+        prog_text = _render_prog(calls, candidate_id, str(variant.get("name", "variant")), immutable_prefix_len, call_map)
         seeds.append({
-            "name": f"seed_{variant['name']}.prog",
+            "name": f"seed_{variant.get('name', 'variant')}.prog",
             "calls": calls,
             "prog_text": prog_text,
         })
@@ -107,7 +73,6 @@ def synthesize(state_model: dict) -> list[dict]:
 
 
 def emit_manifest(seeds: list[dict], state_model: dict) -> dict:
-    """Produce a seed manifest for the orchestrator."""
     return {
         "candidate_id": state_model["candidate_id"],
         "schema_version": "seed_manifest/v1",
@@ -115,10 +80,10 @@ def emit_manifest(seeds: list[dict], state_model: dict) -> dict:
         "immutable_prefix_len": state_model["immutable_prefix_len"],
         "seeds": [
             {
-                "name": s["name"],
-                "call_count": len(s["calls"]),
+                "name": seed["name"],
+                "call_count": len(seed["calls"]),
             }
-            for s in seeds
+            for seed in seeds
         ],
     }
 

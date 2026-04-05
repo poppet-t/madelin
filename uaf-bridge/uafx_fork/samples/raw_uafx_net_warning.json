@@ -1,0 +1,100 @@
+{
+  "warning_id": "uafx-net-arm64-0001",
+  "analysis_kind": "cross_entry_uaf",
+  "kernel_area": "net/netfilter",
+  "subsystem": "net",
+  "target_family": "net-netfilter-arm64-v1",
+  "arch": "arm64",
+  "flow": "Con",
+  "free_site": {
+    "function": "nf_tables_destroy_set",
+    "file": "net/netfilter/nf_tables_api.c",
+    "line": 6123,
+    "context": [
+      "nfnetlink_rcv_batch",
+      "nf_tables_destroy_set",
+      "kfree"
+    ]
+  },
+  "use_site": {
+    "function": "nf_tables_dump_set",
+    "file": "net/netfilter/nf_tables_api.c",
+    "line": 7441,
+    "context": [
+      "nfnetlink_rcv_batch",
+      "nf_tables_getset",
+      "nf_tables_dump_set"
+    ]
+  },
+  "entry_candidates": [
+    {
+      "function": "nfnetlink_rcv_batch",
+      "kind_hint": "netlink_send",
+      "confidence": "grounded"
+    }
+  ],
+  "object_hints": {
+    "same_object": true,
+    "object_type": "struct nft_set"
+  },
+  "efp": {
+    "escape_sites": [
+      {
+        "function": "nf_tables_newset",
+        "stmt": "set = nft_set_alloc()",
+        "object_hint": "struct nft_set"
+      }
+    ],
+    "fetch_sites": [
+      {
+        "function": "nf_tables_getset",
+        "stmt": "set = nft_set_lookup_byhandle()",
+        "object_hint": "struct nft_set"
+      }
+    ],
+    "clobber_sites": [
+      {
+        "function": "nf_tables_destroy_set",
+        "stmt": "kfree(set)"
+      }
+    ]
+  },
+  "lock_ops": [],
+  "condition_ops": [],
+  "thread_ops": [
+    {
+      "kind": "netlink_batch",
+      "function": "nfnetlink_rcv_batch",
+      "context_role": "free"
+    },
+    {
+      "kind": "dump",
+      "function": "nf_tables_dump_set",
+      "context_role": "use"
+    }
+  ],
+  "partial_order": [
+    {
+      "before": "escape",
+      "after": "fetch",
+      "reason": "The nft set must be created before later get/dump messages can resolve it."
+    },
+    {
+      "before": "free",
+      "after": "use",
+      "reason": "The delete/get race requires teardown before a later dump-side use."
+    }
+  ],
+  "predicate_hints": [
+    {
+      "name": "netlink_socket_ready",
+      "must_hold_at": "escape",
+      "scope": "heuristic"
+    },
+    {
+      "name": "nft_object_visible",
+      "must_hold_at": "fetch",
+      "scope": "heuristic"
+    }
+  ]
+}

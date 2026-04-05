@@ -1,0 +1,100 @@
+{
+  "warning_id": "uafx-bpf-arm64-0001",
+  "analysis_kind": "cross_entry_uaf",
+  "kernel_area": "kernel/bpf",
+  "subsystem": "bpf",
+  "target_family": "bpf-arm64-v1",
+  "arch": "arm64",
+  "flow": "Con",
+  "free_site": {
+    "function": "bpf_link_free",
+    "file": "kernel/bpf/syscall.c",
+    "line": 4988,
+    "context": [
+      "__sys_bpf",
+      "bpf_link_free",
+      "kfree"
+    ]
+  },
+  "use_site": {
+    "function": "bpf_map_lookup_elem",
+    "file": "kernel/bpf/syscall.c",
+    "line": 1632,
+    "context": [
+      "__sys_bpf",
+      "map_lookup_elem",
+      "bpf_map_lookup_elem"
+    ]
+  },
+  "entry_candidates": [
+    {
+      "function": "__sys_bpf",
+      "kind_hint": "bpf_cmd",
+      "confidence": "grounded"
+    }
+  ],
+  "object_hints": {
+    "same_object": true,
+    "object_type": "struct bpf_link"
+  },
+  "efp": {
+    "escape_sites": [
+      {
+        "function": "bpf_link_prime",
+        "stmt": "link = fdget_raw()",
+        "object_hint": "struct bpf_link"
+      }
+    ],
+    "fetch_sites": [
+      {
+        "function": "map_lookup_elem",
+        "stmt": "link = container_of(map, struct bpf_link, map)",
+        "object_hint": "struct bpf_link"
+      }
+    ],
+    "clobber_sites": [
+      {
+        "function": "bpf_link_free",
+        "stmt": "kfree(link)"
+      }
+    ]
+  },
+  "lock_ops": [],
+  "condition_ops": [],
+  "thread_ops": [
+    {
+      "kind": "syscall",
+      "function": "__sys_bpf",
+      "context_role": "free"
+    },
+    {
+      "kind": "syscall",
+      "function": "__sys_bpf",
+      "context_role": "use"
+    }
+  ],
+  "partial_order": [
+    {
+      "before": "escape",
+      "after": "fetch",
+      "reason": "Map/program/link objects must be created before later update or query paths use them."
+    },
+    {
+      "before": "free",
+      "after": "use",
+      "reason": "Detach and close must race ahead of the later lookup-side use."
+    }
+  ],
+  "predicate_hints": [
+    {
+      "name": "bpf_map_ready",
+      "must_hold_at": "escape",
+      "scope": "heuristic"
+    },
+    {
+      "name": "bpf_link_attached",
+      "must_hold_at": "fetch",
+      "scope": "heuristic"
+    }
+  ]
+}

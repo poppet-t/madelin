@@ -1,0 +1,83 @@
+{
+  "pack": "net",
+  "subsystem": "net",
+  "maturity": "runtime-validated(dry-run)",
+  "arch": "arm64",
+  "target_families": ["net-netfilter-arm64-v1"],
+  "kernel_area_prefixes": ["net/netfilter", "net/netlink"],
+  "supported_entry_kinds": ["netlink_send", "netlink_recv", "close_teardown", "fd_dup_or_share", "poll_wait"],
+  "lifecycle_templates": [
+    "socket -> create -> update -> dump/get -> delete -> close",
+    "create in thread A while dump/delete races in thread B"
+  ],
+  "witness_constraints": [
+    "Preserve netlink socket setup before nft batch operations.",
+    "Keep delete after create/update when template says so."
+  ],
+  "resource_chain": [
+    {"resource": "fd_nl", "type": "fd", "producer_call": "socket$NETLINK_NETFILTER", "consumer_calls": ["sendmsg$NFT_BATCH_CREATE", "sendmsg$NFT_BATCH_UPDATE", "recvmsg$NETLINK_DUMP", "sendmsg$NFT_BATCH_DELETE", "close$NETLINK_NETFILTER"]}
+  ],
+  "phase_calls": {
+    "bootstrap": ["socket$NETLINK_NETFILTER"],
+    "configure": ["sendmsg$NFT_BATCH_CREATE", "sendmsg$NFT_BATCH_UPDATE"],
+    "trigger": ["recvmsg$NETLINK_DUMP", "sendmsg$NFT_BATCH_DELETE", "close$NETLINK_NETFILTER"]
+  },
+  "favored_suffix_calls": ["recvmsg$NETLINK_DUMP", "sendmsg$NFT_BATCH_DELETE", "close$NETLINK_NETFILTER"],
+  "call_aliases": {},
+  "seed_variants": [
+    {"name": "delete_dump", "suffix": ["sendmsg$NFT_BATCH_DELETE", "recvmsg$NETLINK_DUMP"]},
+    {"name": "dump_delete", "suffix": ["recvmsg$NETLINK_DUMP", "sendmsg$NFT_BATCH_DELETE"]},
+    {"name": "delete_close", "suffix": ["sendmsg$NFT_BATCH_DELETE", "close$NETLINK_NETFILTER"]},
+    {"name": "dump_close", "suffix": ["recvmsg$NETLINK_DUMP", "close$NETLINK_NETFILTER"]},
+    {"name": "update_dump_delete", "suffix": ["sendmsg$NFT_BATCH_UPDATE", "recvmsg$NETLINK_DUMP", "sendmsg$NFT_BATCH_DELETE"]}
+  ],
+  "syz_call_map": {
+    "socket$NETLINK_NETFILTER": "r0 = socket$NETLINK_NETFILTER(0x10, 0x3, 0xc)",
+    "sendmsg$NFT_BATCH_CREATE": "sendmsg$NFT_BATCH_CREATE(r0, &AUTO, 0x0)",
+    "sendmsg$NFT_BATCH_UPDATE": "sendmsg$NFT_BATCH_UPDATE(r0, &AUTO, 0x0)",
+    "recvmsg$NETLINK_DUMP": "recvmsg(r0, &AUTO, 0x0)",
+    "sendmsg$NFT_BATCH_DELETE": "sendmsg$NFT_BATCH_DELETE(r0, &AUTO, 0x0)",
+    "close$NETLINK_NETFILTER": "close(r0)"
+  },
+  "enable_syscalls": [
+    "socket$NETLINK_NETFILTER",
+    "sendmsg$NETLINK",
+    "sendmsg$NFT_BATCH",
+    "recvmsg",
+    "getsockopt$SO_RCVBUF",
+    "setsockopt$SO_SNDBUF",
+    "close",
+    "dup",
+    "dup2",
+    "dup3",
+    "unshare",
+    "setns"
+  ],
+  "runtime_config_hints": {
+    "sandbox": "namespace",
+    "procs": 2,
+    "threaded": true,
+    "timeout_sec": 90,
+    "enable_netfilter": true,
+    "enable_nftables": true,
+    "kernel_config_required": [
+      "CONFIG_NETFILTER=y",
+      "CONFIG_NF_TABLES=y",
+      "CONFIG_NF_TABLES_NETDEV=y",
+      "CONFIG_NETLINK_DIAG=y",
+      "CONFIG_KASAN=y",
+      "CONFIG_KCOV=y"
+    ]
+  },
+  "triage_signal_rules": [
+    "Match nf_tables object lifecycle frames.",
+    "Prefer crashes after multi-message state transitions.",
+    "Distinguish nf_tables teardown/use frame pairs from unrelated net crashes.",
+    "Score subsystem relevance using net_symbols enrichment."
+  ],
+  "fixture_paths": {
+    "raw_warning": "uaf-bridge/uafx_fork/samples/raw_uafx_net_warning.json",
+    "bridge_export": "uaf-bridge/extractor/sample_uafx_net_bridge_export.json",
+    "backend_fixture_dir": "backend/syz-guided/tests/fixtures/packs/net"
+  }
+}

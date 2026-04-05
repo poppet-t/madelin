@@ -12,6 +12,12 @@ Read before making changes:
 - @plans/current.md
 - @plans/repo-map.md
 - @plans/schema-impact.md
+- @plans/io_uring-runtime-proof.md
+- @plans/net-runtime-proof.md
+- Treat `backend/syz-guided/scripts/run_net_vm_campaign.sh` and `docs/ai/OPENCLAW-RUNBOOK.md` as the authoritative nf_tables live-validation entrypoints.
+- For the arm64 QEMU net lane, prefer `syzkaller-runtime-export/arm64-live-ready.qcow2`
+  with `--guest-extra-append 'init=/root/madelin-guest-init.sh'` and guest-resident
+  `/root/syz-execprog` + `/root/syz-executor` unless a faster validated guest path exists.
 
 ## Skills
 
@@ -28,6 +34,11 @@ Bounded role procedures — use the matching skill when a task fits its trigger.
 - @skills/mapper-maintainer/SKILL.md
 - @skills/solver-maintainer/SKILL.md
 - @skills/runtime-emitter-maintainer/SKILL.md
+- @skills/target-pack-design/SKILL.md
+- @skills/witness-plan-contract/SKILL.md
+- @skills/subsystem-fixture-generation/SKILL.md
+- @skills/smoke-test-authoring/SKILL.md
+- @skills/candidate-aware-triage-extension/SKILL.md
 
 ## Core rules
 

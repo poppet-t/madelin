@@ -4,9 +4,11 @@
 UAF Witness Bridge
 
 ## 2. Summary
-Build a research prototype that links a static cross-entry UAF analysis pipeline to a dynamic kernel fuzzing pipeline using Z3 as a witness-synthesis bridge.
+Build a research prototype that links a static cross-entry lifetime-bug analysis pipeline to a dynamic kernel validation workflow using Z3 as a witness-synthesis bridge.
 
 The system ingests static candidates extracted from LLVM-based analysis, normalizes them into a canonical candidate schema, encodes feasibility constraints into Z3, solves for a runnable witness schedule, and emits a plan-aware syscall prefix for a syzkaller-style executor/fuzzer to realize and validate.
+
+The practical execution environment target is **hardware-light arm64**: ordinary arm64 Linux VMs with no nested virtualization and no special passthrough hardware. Subsystem scope is managed through **target packs** (KVM is one pack; other packs cover software-reachable user/kernel interfaces such as io_uring, netlink/netfilter, eBPF, and mount/FUSE).
 
 The product goal is not generic fuzzing. The goal is traceable end-to-end validation:
 
@@ -81,12 +83,21 @@ Given a static warning containing free/use sites, path contexts, and cross-entry
 - Syz-style prefix generation
 - Plan-aware runtime mode
 - Proof bundle generation
+- Target-pack model for scoping supported subsystem families without changing artifact contracts
 
 ### Out of scope for v1
 - Generalized argument/value solving in SMT
 - Full driver environment inference
 - Automatic support for every subsystem
 - Large-scale campaign orchestration
+
+### Initial target packs (v1 pivot scope)
+The v1 pivot focuses on software-reachable subsystems that can be exercised from standard userspace in a VM:
+- io_uring
+- netlink / netfilter / control-plane families
+- eBPF
+- mount API / FUSE
+- optional second-wave: ublk
 
 ## 10. System design overview
 
@@ -171,12 +182,28 @@ Required fields:
 - status
 
 ### FR-2 Entry classification
-The system shall classify supported entry surfaces into a small initial taxonomy:
+The system shall classify supported entry surfaces into a normalized taxonomy suitable for witness planning.
+
+Minimum initial taxonomy:
 - file_ioctl
 - file_read
 - file_write
 - sysfs_show
 - sysfs_store
+
+Target-pack extensions (may start as hints/templates; must remain explicit about unsupported cases):
+- io_uring_setup
+- io_uring_enter
+- io_uring_register
+- netlink_send
+- netlink_recv
+- bpf_cmd
+- mount_api_step
+- fuse_control
+- poll_wait
+- mmap_interaction
+- close_teardown
+- fd_dup_or_share
 
 ### FR-3 Syscall template generation
 The system shall emit one or more syscall templates for each supported entry class.

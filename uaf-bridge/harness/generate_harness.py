@@ -9,6 +9,7 @@ from typing import Any
 from common.cli import print_cli_error
 from common.io import load_json, write_text
 from common.schema_validation import validate_candidate, validate_witness_plan
+from harness.generic_templates import render_generic_harness
 from harness.kvm_templates import build_kvm_timer_context, render_kvm_timer_harness
 
 
@@ -20,6 +21,11 @@ def render_harness(candidate: dict[str, Any], plan: dict[str, Any]) -> str:
         raise ValueError("candidate_id mismatch between candidate and witness plan")
     if not plan.get("sat", False):
         raise ValueError("witness plan is UNSAT; cannot generate a micro-harness")
+
+    analysis_context = candidate.get("analysis_context")
+    subsystem = analysis_context.get("subsystem") if isinstance(analysis_context, dict) else None
+    if subsystem != "kvm":
+        return render_generic_harness(candidate, plan)
 
     context = build_kvm_timer_context(candidate, plan)
     return render_kvm_timer_harness(context)

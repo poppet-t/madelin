@@ -4,7 +4,9 @@ Candidate-directed syzkaller backend for UAFX cross-entry UAF realization.
 
 ## Scope
 
-- Linux arm64 KVM only
+- Hardware-light arm64 Linux target packs
+- Legacy/initial pack: `kvm`
+- Initial software-reachable packs: `io_uring`, `net`, `bpf`, `fs`
 - Consumes `candidate.json` + `witness_plan.json` from `uaf-bridge/`
 - Produces runtime artifacts: state model, target profile, relation graph, seeds
 - Orchestrates bounded fuzzing campaigns
@@ -39,6 +41,11 @@ bash scripts/smoke_seedgen.sh
 bash scripts/smoke_campaign.sh
 bash scripts/smoke_triage.sh
 bash scripts/smoke_vm_validator.sh   # preflight-only or full TCG boot (macOS/Linux)
+bash scripts/smoke_pack.sh --pack kvm
+bash scripts/smoke_pack.sh --pack io_uring
+bash scripts/smoke_pack.sh --pack net
+bash scripts/smoke_pack.sh --pack bpf
+bash scripts/smoke_pack.sh --pack fs
 ```
 
 ## Linux KVM scripts (Linux only — fail honestly on macOS)
@@ -75,7 +82,7 @@ repro/             Candidate-preserving repro wrapper
 integration/       Syzkaller runner interface
 vm_validator/      One-shot QEMU TCG arm64 validation (macOS, validated)
 scripts/           Smoke tests + Linux KVM helper scripts
-tests/             Unit tests + fixtures (84 tests total)
+tests/             Unit tests + fixtures (88 tests total)
 ```
 
 ## Artifacts produced

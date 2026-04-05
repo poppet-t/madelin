@@ -10,6 +10,7 @@ from common.cli import print_cli_error
 from common.io import load_json, write_text
 from common.schema_validation import validate_candidate, validate_witness_plan
 from mapping.syz_descriptions import bridge_family_from_template_call, harvest_kvm_descriptions
+from mapping.target_registry import resolve_target_manifest
 
 
 def _unsupported_witness_candidate(reason: str) -> ValueError:
@@ -18,6 +19,17 @@ def _unsupported_witness_candidate(reason: str) -> ValueError:
 
 def _unsupported_witness_template(reason: str) -> ValueError:
     return ValueError(f"unsupported witness template: {reason}")
+
+
+def _candidate_manifest(candidate: dict[str, Any]) -> dict[str, Any]:
+    analysis_context = candidate.get("analysis_context")
+    if not isinstance(analysis_context, dict):
+        return resolve_target_manifest()
+    return resolve_target_manifest(
+        kernel_area=analysis_context.get("kernel_area") if isinstance(analysis_context.get("kernel_area"), str) else None,
+        subsystem=analysis_context.get("subsystem") if isinstance(analysis_context.get("subsystem"), str) else None,
+        target_family=analysis_context.get("target_family") if isinstance(analysis_context.get("target_family"), str) else None,
+    )
 
 
 def select_representative_template(
@@ -131,6 +143,99 @@ def template_witness_families(template: dict[str, Any]) -> list[str]:
     return families
 
 
+def _template_call_names(template: dict[str, Any]) -> list[str]:
+    calls = template.get("calls", [])
+    if not isinstance(calls, list) or not all(isinstance(call, str) for call in calls):
+        raise _unsupported_witness_template("template calls must be a string array")
+
+    families: list[str] = []
+    for call in calls:
+        family = call.split("(", 1)[0].strip()
+        if not family:
+            raise _unsupported_witness_template(f"template call has no callable family: {call}")
+        families.append(family)
+    return families
+
+
+def _generic_event_for_call(family: str, call_index: int, total_calls: int) -> str:
+    lowered = family.lower()
+    if call_index == 0:
+        return "init_resource"
+    if any(token in lowered for token in ("register", "config", "attach", "create")):
+        return "escape"
+    if any(token in lowered for token in ("lookup", "get", "dump", "read", "poll", "mmap", "update")):
+        return "fetch"
+    if any(token in lowered for token in ("delete", "detach", "release", "free")):
+        return "free"
+    if any(token in lowered for token in ("close", "umount")):
+        return "cleanup" if call_index == total_calls - 1 else "free"
+    if any(token in lowered for token in ("enter", "run", "move_mount")):
+        return "use"
+    return "use" if call_index >= max(total_calls - 2, 1) else "fetch"
+
+
+def _render_generic_witness(candidate: dict[str, Any], plan: dict[str, Any], manifest: dict[str, Any]) -> str:
+    entry_func, entry_kind, template = select_representative_template(candidate, plan)
+    template_id = template.get("template_id", "unknown_template")
+    required_resources = template.get("required_resources", [])
+    if not isinstance(required_resources, list) or not all(isinstance(resource, str) for resource in required_resources):
+        raise _unsupported_witness_template("template required_resources must be a string array")
+
+    call_map = manifest.get("syz_call_map", {})
+    if not isinstance(call_map, dict):
+        raise _unsupported_witness_template(f"target pack '{manifest['pack']}' is missing syz_call_map")
+
+    families = _template_call_names(template)
+    unsupported = [family for family in families if family not in call_map]
+    if unsupported:
+        unsupported_text = ", ".join(sorted(dict.fromkeys(unsupported)))
+        raise _unsupported_witness_template(
+            f"representative template needs future runnable-witness support: {unsupported_text}"
+        )
+
+    plan_steps = ordered_plan_steps_with_threads(plan)
+    event_threads = thread_ids_by_event(plan)
+    execution_hints = plan.get("execution_hints", {})
+    min_threads = int(execution_hints.get("min_threads", 1))
+    concurrent = min_threads > 1 or candidate.get("flow") == "Con"
+
+    lines: list[str] = []
+    lines.append("# uaf_bridge_witness=runnable")
+    lines.append(f"# candidate_id={candidate['candidate_id']}")
+    lines.append(f"# candidate_schema_version={candidate['schema_version']}")
+    lines.append(f"# witness_plan_schema_version={plan['schema_version']}")
+    lines.append(f"# representative_entry_func={entry_func}")
+    lines.append(f"# representative_entry_kind={entry_kind}")
+    lines.append(f"# representative_template_id={template_id}")
+    lines.append("# syzkaller_root=pack-generic")
+    lines.append(f"# target_pack={manifest['pack']}")
+    lines.append(f"# required_resources={','.join(required_resources) if required_resources else '(none)'}")
+    lines.append("# schedule_note=structural_plan_steps_are_preserved_in_comments")
+    lines.append("# concrete_order_note=template_order_preserves_target_pack_dependencies")
+    lines.append(
+        f"# exec_mode threaded={1 if concurrent else 0} collide={1 if concurrent else 0} procs={max(min_threads, 1)}"
+    )
+    lines.append("")
+
+    for step in plan_steps:
+        lines.append(
+            "# plan_step "
+            f"step_index={step['step_index']} "
+            f"event={step['event']} "
+            f"thread={step['thread_id']} "
+            f"timestamp={step['timestamp']}"
+        )
+
+    lines.append("")
+    for call_index, family in enumerate(families):
+        event = _generic_event_for_call(family, call_index, len(families))
+        thread_id = event_threads.get(event, 0)
+        lines.append(f"# call_index={call_index} family={family} event={event} thread={thread_id}")
+        lines.append(str(call_map[family]))
+
+    return "\n".join(lines) + "\n"
+
+
 def _format_numeric(value: int) -> str:
     return hex(value) if value >= 0 else str(value)
 
@@ -196,7 +301,7 @@ def _render_family_call(
 def render_witness(
     candidate: dict[str, Any], plan: dict[str, Any], syz_root: str | Path | None = None
 ) -> str:
-    """Render a runnable narrow-KVM witness program with structural schedule metadata."""
+    """Render a runnable witness program with structural schedule metadata."""
     validate_candidate(candidate)
     validate_witness_plan(plan)
 
@@ -204,6 +309,10 @@ def render_witness(
         raise ValueError("witness plan is UNSAT; cannot emit runnable witness")
     if candidate.get("candidate_id") != plan.get("candidate_id"):
         raise ValueError("candidate_id mismatch between candidate and witness plan")
+
+    manifest = _candidate_manifest(candidate)
+    if manifest.get("pack") != "kvm":
+        return _render_generic_witness(candidate, plan, manifest)
 
     entry_func, entry_kind, template = select_representative_template(candidate, plan)
     template_id = template.get("template_id", "unknown_template")

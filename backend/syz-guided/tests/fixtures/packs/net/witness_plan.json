@@ -1,0 +1,145 @@
+{
+  "barriers": [
+    {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "Pointer must escape before later fetch/use chain."
+    },
+    {
+      "after": "fetch",
+      "before": "escape",
+      "reason": "The nft set must be created before later get/dump messages can resolve it."
+    },
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "The delete/get race requires teardown before a later dump-side use."
+    },
+    {
+      "after": "use",
+      "before": "free",
+      "reason": "Use-after-free requires free to occur before use."
+    }
+  ],
+  "candidate_id": "cand_ca6bd5da811d1948",
+  "debug": {
+    "check_result": "sat",
+    "encoded_event_count": 6,
+    "encoded_events": [
+      "init_resource",
+      "escape",
+      "free",
+      "fetch",
+      "use",
+      "cleanup"
+    ],
+    "input_mapping_confidence": "manual",
+    "soft_constraints": [
+      "prefer_split_threads: free/use on different threads when feasible"
+    ],
+    "solver": "z3.Optimize",
+    "unsat_reasons": []
+  },
+  "execution_hints": {
+    "candidate_flow": "Con",
+    "entry_selection": {
+      "entry_func": "nfnetlink_rcv_batch",
+      "entry_kind": "netlink_send",
+      "template_id": "nfnetlink_rcv_batch:netlink_send:net-netfilter-arm64:v1"
+    },
+    "min_threads": 2,
+    "notes": [
+      "Structural witness only: ordering, thread assignment, and readiness predicates are encoded.",
+      "Exact syscall argument synthesis remains intentionally out of scope for v1."
+    ]
+  },
+  "ordered_steps": [
+    {
+      "event": "free",
+      "step_index": 0,
+      "timestamp": 0
+    },
+    {
+      "event": "use",
+      "step_index": 1,
+      "timestamp": 1
+    },
+    {
+      "event": "escape",
+      "step_index": 2,
+      "timestamp": 2
+    },
+    {
+      "event": "cleanup",
+      "step_index": 3,
+      "timestamp": 3
+    },
+    {
+      "event": "fetch",
+      "step_index": 4,
+      "timestamp": 4
+    },
+    {
+      "event": "init_resource",
+      "step_index": 5,
+      "timestamp": 5
+    }
+  ],
+  "predicates": [
+    {
+      "must_hold_at": "escape",
+      "name": "netlink_socket_ready",
+      "scope": "heuristic"
+    },
+    {
+      "must_hold_at": "fetch",
+      "name": "nft_object_visible",
+      "scope": "heuristic"
+    }
+  ],
+  "sat": true,
+  "schema_version": "witness_plan/v1",
+  "status": "sat",
+  "threads": [
+    {
+      "steps": [
+        {
+          "event": "free",
+          "step_index": 0,
+          "timestamp": 0
+        },
+        {
+          "event": "escape",
+          "step_index": 2,
+          "timestamp": 2
+        },
+        {
+          "event": "cleanup",
+          "step_index": 3,
+          "timestamp": 3
+        },
+        {
+          "event": "fetch",
+          "step_index": 4,
+          "timestamp": 4
+        },
+        {
+          "event": "init_resource",
+          "step_index": 5,
+          "timestamp": 5
+        }
+      ],
+      "thread_id": 0
+    },
+    {
+      "steps": [
+        {
+          "event": "use",
+          "step_index": 1,
+          "timestamp": 1
+        }
+      ],
+      "thread_id": 1
+    }
+  ]
+}

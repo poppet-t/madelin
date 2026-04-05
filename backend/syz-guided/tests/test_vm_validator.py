@@ -9,9 +9,11 @@ missing prerequisites.
 import json
 import os
 import pathlib
+import socket
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
@@ -22,7 +24,13 @@ from vm_validator.preflight import (
     check_ssh_key,
     run_preflight,
 )
-from vm_validator.vm_runner import build_qemu_cmd, DEFAULT_SSH_PORT
+from vm_validator.vm_runner import (
+    DEFAULT_SSH_PORT,
+    build_qemu_cmd,
+    classify_boot_failure,
+    probe_ssh_banner,
+    wait_for_ssh_command,
+)
 from vm_validator.prog_injector import build_inject_cmd, build_scp_cmd
 from vm_validator.log_collector import extract_kasan, save_logs
 
@@ -177,6 +185,89 @@ class TestBuildQemuCmd(unittest.TestCase):
         )
         self.assertIn("-serial", cmd)
         self.assertIn("file:/tmp/console.log", cmd)
+
+    def test_default_append_does_not_force_custom_init(self):
+        idx = self.cmd.index("-append")
+        append = self.cmd[idx + 1]
+        self.assertNotIn("init=/root/madelin-guest-init.sh", append)
+
+
+class TestSshReadiness(unittest.TestCase):
+    def test_probe_ssh_banner_timeout_classified(self):
+        with mock.patch("vm_validator.vm_runner.socket.create_connection") as create_connection:
+            conn = mock.MagicMock()
+            conn.__enter__.return_value = conn
+            conn.recv.side_effect = socket.timeout()
+            create_connection.return_value = conn
+            result = probe_ssh_banner(port=2222, timeout=0.1)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["connected"])
+        self.assertEqual(result["error"], "banner timeout")
+
+    def test_wait_for_ssh_command_reports_banner_timeout(self):
+        with mock.patch(
+            "vm_validator.vm_runner.probe_ssh_banner",
+            return_value={"ok": False, "connected": True, "error": "banner timeout", "banner": ""},
+        ), mock.patch(
+            "vm_validator.vm_runner.probe_ssh_command",
+            return_value={"ok": False, "stderr": "banner exchange", "stdout": "", "failure_class": "ssh_banner_timeout", "error": "banner exchange"},
+        ):
+            result = wait_for_ssh_command(
+                ssh_key=pathlib.Path("/tmp/fake"),
+                timeout=0.01,
+                poll_interval=0.01,
+            )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["failure_class"], "ssh_banner_timeout")
+
+    def test_wait_for_ssh_command_succeeds_with_socket_activated_ssh(self):
+        with mock.patch(
+            "vm_validator.vm_runner.probe_ssh_banner",
+            side_effect=[
+                {"ok": False, "connected": True, "error": "banner timeout", "banner": ""},
+            ],
+        ), mock.patch(
+            "vm_validator.vm_runner.probe_ssh_command",
+            return_value={"ok": True, "stderr": "", "stdout": "", "failure_class": None},
+        ):
+            result = wait_for_ssh_command(
+                ssh_key=pathlib.Path("/tmp/fake"),
+                timeout=0.05,
+                poll_interval=0.01,
+            )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["timeline"][0]["banner_error"], "banner timeout")
+
+    def test_classify_boot_failure_missing_init(self):
+        result = classify_boot_failure(
+            console_excerpt=["Kernel panic - not syncing: Requested init /root/madelin-guest-init.sh failed (error -2)."],
+        )
+        self.assertEqual(result["failure_class"], "custom_init_missing")
+
+    def test_classify_boot_failure_emergency_mode(self):
+        result = classify_boot_failure(
+            console_excerpt=["You are in emergency mode. After logging in, type journalctl -xb to view"],
+        )
+        self.assertEqual(result["failure_class"], "systemd_emergency_mode")
+
+    def test_wait_for_ssh_command_succeeds_on_real_probe(self):
+        with mock.patch(
+            "vm_validator.vm_runner.probe_ssh_banner",
+            side_effect=[
+                {"ok": False, "connected": False, "error": "connection refused", "banner": ""},
+                {"ok": True, "connected": True, "error": None, "banner": "SSH-2.0-OpenSSH_9.6"},
+            ],
+        ), mock.patch(
+            "vm_validator.vm_runner.probe_ssh_command",
+            return_value={"ok": True, "stderr": "", "stdout": "", "failure_class": None},
+        ):
+            result = wait_for_ssh_command(
+                ssh_key=pathlib.Path("/tmp/fake"),
+                timeout=0.05,
+                poll_interval=0.01,
+            )
+        self.assertTrue(result["ok"])
+        self.assertGreaterEqual(len(result["timeline"]), 2)
 
 
 # ---------------------------------------------------------------------------

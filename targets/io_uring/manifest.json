@@ -1,0 +1,71 @@
+{
+  "pack": "io_uring",
+  "subsystem": "io_uring",
+  "maturity": "runtime-validated(dry-run)",
+  "arch": "arm64",
+  "target_families": ["io-uring-arm64-v1"],
+  "kernel_area_prefixes": ["io_uring", "fs/io_uring"],
+  "supported_entry_kinds": ["io_uring_setup", "io_uring_register", "io_uring_enter", "close_teardown", "fd_dup_or_share", "poll_wait", "mmap_interaction"],
+  "lifecycle_templates": [
+    "setup -> register -> submit/enter -> cancel -> close",
+    "setup -> share/register -> close in thread A while enter in thread B"
+  ],
+  "witness_constraints": [
+    "Preserve ring setup before register/enter.",
+    "Keep teardown racing after registration."
+  ],
+  "resource_chain": [
+    {"resource": "fd_ring", "type": "fd", "producer_call": "io_uring_setup", "consumer_calls": ["io_uring_register$IORING_REGISTER_FILES", "io_uring_enter", "close$io_uring"]}
+  ],
+  "phase_calls": {
+    "bootstrap": ["io_uring_setup"],
+    "configure": ["io_uring_register$IORING_REGISTER_FILES", "dup$io_uring"],
+    "trigger": ["io_uring_enter", "close$io_uring", "poll$io_uring"]
+  },
+  "favored_suffix_calls": ["io_uring_enter", "close$io_uring", "poll$io_uring"],
+  "call_aliases": {},
+  "seed_variants": [
+    {"name": "enter_once", "suffix": ["io_uring_enter"]},
+    {"name": "enter_close", "suffix": ["io_uring_enter", "close$io_uring"]},
+    {"name": "poll_close", "suffix": ["poll$io_uring", "close$io_uring"]},
+    {"name": "dup_enter", "suffix": ["dup$io_uring", "io_uring_enter", "close$io_uring"]}
+  ],
+  "syz_call_map": {
+    "io_uring_setup": "r0 = io_uring_setup(0x8, &AUTO={})",
+    "io_uring_register$IORING_REGISTER_FILES": "io_uring_register$IORING_REGISTER_FILES(r0, &AUTO=[0xffffffffffffffff], 0x1)",
+    "dup$io_uring": "r1 = dup(r0)",
+    "io_uring_enter": "io_uring_enter(r0, 0x1, 0x1, 0x0, 0x0, 0x0)",
+    "poll$io_uring": "poll(&AUTO=[{r0, 0x1}], 0x1, 0x0)",
+    "close$io_uring": "close(r0)"
+  },
+  "enable_syscalls": [
+    "io_uring_setup",
+    "io_uring_register$IORING_REGISTER_FILES",
+    "io_uring_enter",
+    "dup",
+    "close",
+    "poll",
+    "mmap"
+  ],
+  "runtime_config_hints": {
+    "vm_type": "qemu",
+    "accel": "kvm",
+    "kernel_config_required": ["CONFIG_IO_URING=y", "CONFIG_KASAN=y", "CONFIG_KCOV=y"],
+    "kernel_config_recommended": ["CONFIG_IO_URING_STATS=y", "CONFIG_LOCKDEP=y"],
+    "sandbox": "none",
+    "procs": 2,
+    "threaded": true,
+    "repeat": 0,
+    "slowdown": 1,
+    "cover": true
+  },
+  "triage_signal_rules": [
+    "Match io_ring_ctx lifecycle frames.",
+    "Prefer crashes after register/enter/close interleavings."
+  ],
+  "fixture_paths": {
+    "raw_warning": "uaf-bridge/uafx_fork/samples/raw_uafx_io_uring_warning.json",
+    "bridge_export": "uaf-bridge/extractor/sample_uafx_io_uring_bridge_export.json",
+    "backend_fixture_dir": "backend/syz-guided/tests/fixtures/packs/io_uring"
+  }
+}

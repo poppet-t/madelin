@@ -12,7 +12,7 @@ from common.cli import print_cli_error
 from common.io import load_json, write_json
 from common.schema_validation import validate_candidate, validate_witness_plan
 from smt.encode_candidate import encode_candidate
-from smt.extract_schedule import build_barriers, group_steps_by_thread, sort_events_by_timestamp
+from smt.extract_schedule import build_barriers, canonical_ordered_steps, canonical_thread_map, group_steps_by_thread
 
 SCHEMA_VERSION = "witness_plan/v1"
 
@@ -109,8 +109,8 @@ def solve_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
     if result == sat:
         model = encoded.optimizer.model()
         model_payload = _model_dict(encoded, model)
-        ordered_steps = sort_events_by_timestamp(model_payload["timestamps"])
-        threads = group_steps_by_thread(ordered_steps, model_payload["threads"])
+        ordered_steps = canonical_ordered_steps(encoded.events, encoded.partial_order)
+        threads = group_steps_by_thread(ordered_steps, canonical_thread_map(encoded.events, encoded.flow, encoded.min_threads))
         plan = {
             "barriers": barriers,
             "candidate_id": candidate["candidate_id"],
